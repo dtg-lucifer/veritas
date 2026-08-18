@@ -1,0 +1,44 @@
+services:
+  # 1. Redis Message Broker & Stream Queue
+  redis:
+    image: redis:7.2-alpine
+    container_name: firewall_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # 2. Redis Web Commander GUI (Inspect Queue & Messages)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: firewall_redis_ui
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 3. AI/ML Anomaly Detection Backend & WebSocket Hub
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: firewall_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_QUEUE_KEY=network_logs_queue
+      - ALERT_THRESHOLD=55.0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped

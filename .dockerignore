@@ -1,0 +1,22 @@
+# Ignore raw dataset folders (14GB+ http.csv)
+ml/data/
+data/
+*.csv
+*.parquet
+*.zip
+*.tar.gz
+
+# Ignore local virtualenvs & caches
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/.ruff_cache/
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore node_modules
+**/node_modules/

@@ -1,0 +1,103 @@
+{
+  "total_evaluated_records": 329100,
+  "total_ground_truth_anomalies": 985,
+  "models": [
+    {
+      "model_name": "Supervised Gradient Boosting (LightGBM)",
+      "threshold": 0.5,
+      "precision": 0.2288,
+      "recall": 1.0,
+      "f1_score": 0.3724,
+      "roc_auc": 0.9998,
+      "pr_auc": 0.9363,
+      "false_positive_rate": 0.0101,
+      "confusion_matrix": {
+        "true_positives": 985,
+        "false_positives": 3320,
+        "true_negatives": 324795,
+        "false_negatives": 0
+      }
+    },
+    {
+      "model_name": "Statistical Baseline",
+      "threshold": 0.5,
+      "precision": 0.0235,
+      "recall": 0.6315,
+      "f1_score": 0.0453,
+      "roc_auc": 0.8545,
+      "pr_auc": 0.1765,
+      "false_positive_rate": 0.0788,
+      "confusion_matrix": {
+        "true_positives": 622,
+        "false_positives": 25843,
+        "true_negatives": 302272,
+        "false_negatives": 363
+      }
+    },
+    {
+      "model_name": "Isolation Forest (Unsupervised)",
+      "threshold": 0.5,
+      "precision": 0.0058,
+      "recall": 0.0193,
+      "f1_score": 0.0089,
+      "roc_auc": 0.822,
+      "pr_auc": 0.0084,
+      "false_positive_rate": 0.01,
+      "confusion_matrix": {
+        "true_positives": 19,
+        "false_positives": 3272,
+        "true_negatives": 324843,
+        "false_negatives": 966
+      }
+    },
+    {
+      "model_name": "PyTorch Autoencoder (Deep Learning)",
+      "threshold": 0.5,
+      "precision": 0.0149,
+      "recall": 0.2863,
+      "f1_score": 0.0283,
+      "roc_auc": 0.8721,
+      "pr_auc": 0.0135,
+      "false_positive_rate": 0.0569,
+      "confusion_matrix": {
+        "true_positives": 282,
+        "false_positives": 18660,
+        "true_negatives": 309455,
+        "false_negatives": 703
+      }
+    },
+    {
+      "model_name": "Composite Risk Engine (Ensemble)",
+      "threshold": 0.55,
+      "precision": 0.4197,
+      "recall": 0.9766,
+      "f1_score": 0.5871,
+      "roc_auc": 0.9991,
+      "pr_auc": 0.7161,
+      "false_positive_rate": 0.0041,
+      "confusion_matrix": {
+        "true_positives": 962,
+        "false_positives": 1330,
+        "true_negatives": 326785,
+        "false_negatives": 23
+      }
+    }
+  ],
+  "scenarios": {
+    "Scenario 1 (Wikileaks/USB Exfiltration)": {
+      "detected": 72,
+      "total_events": 84,
+      "detection_rate_pct": 85.71
+    },
+    "Scenario 2 (Job Surfing + Data Theft)": {
+      "detected": 853,
+      "total_events": 861,
+      "detection_rate_pct": 99.07
+    },
+    "Scenario 3 (Admin Keylogger Sabotage)": {
+      "detected": 37,
+      "total_events": 40,
+      "detection_rate_pct": 92.5
+    }
+  }
+}

@@ -1,0 +1,25 @@
+[project]
+name = "ml"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "dtg-lucifer", email = "piushbasu@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "joblib>=1.5.3",
+    "lightgbm>=4.7.0",
+    "matplotlib>=3.11.1",
+    "numpy>=2.5.2",
+    "pandas>=3.0.5",
+    "polars>=1.43.2",
+    "pyarrow>=25.0.1",
+    "rich>=15.0.0",
+    "scikit-learn>=1.9.0",
+    "seaborn>=0.13.2",
+    "torch>=2.13.0",
+    "tqdm>=4.70.0",
+    "typer>=0.27.1",
+    "xgboost>=3.4.1",
+]
