@@ -1,7 +1,7 @@
 """
 Traffic Dispatcher & Stream Injector.
-Transmits simulated network log events to either Redis Message Queue
-or directly to the FastAPI Ingest REST endpoint.
+Transmits simulated network log events to either Redis Message Queue ('network_logs_queue')
+or directly to the FastAPI Ingest REST endpoint with live security assessment feedback.
 """
 
 import json
@@ -30,12 +30,16 @@ class TrafficDispatcher:
         self.api_base_url = api_base_url
         self.redis_client: Optional[aioredis.Redis] = None
         self.http_client: Optional[httpx.AsyncClient] = None
+        self.pubsub_task: Optional[asyncio.Task] = None
+        self.received_alerts: List[Dict[str, Any]] = []
 
     async def connect(self):
         if self.target_mode == "redis":
             self.redis_client = aioredis.from_url(self.redis_url, decode_responses=True)
             await self.redis_client.ping()
-            console.print(f"[green]✓ Connected to Redis at {self.redis_url} (Queue: '{self.redis_queue}')[/green]")
+            console.print(f"[green]✓ Connected to Redis Broker at {self.redis_url} (Queue: '{self.redis_queue}')[/green]")
+            # Start background pubsub listener for live alert notifications
+            self.pubsub_task = asyncio.create_task(self._listen_redis_alerts())
         else:
             self.http_client = httpx.AsyncClient(base_url=self.api_base_url, timeout=10.0)
             res = await self.http_client.get("/health")
@@ -44,7 +48,38 @@ class TrafficDispatcher:
             else:
                 console.print(f"[yellow]⚠️ Gateway returned status {res.status_code}[/yellow]")
 
+    async def _listen_redis_alerts(self):
+        """Listens for real-time security alerts on Redis Pub/Sub."""
+        try:
+            pubsub = self.redis_client.pubsub()
+            await pubsub.subscribe("security_alerts_pubsub")
+            while True:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message and message.get("data"):
+                    try:
+                        data = json.loads(message["data"])
+                        self.received_alerts.append(data)
+                        ass = data.get("alert", {})
+                        color = "bold red" if ass.get("status") == "CRITICAL" else "bold yellow"
+                        console.print(
+                            f"[{color}]⚡ [Redis Alert Received] User={ass.get('user')} Risk={ass.get('risk_score')}/100 "
+                            f"Status={ass.get('status')} Action={ass.get('policy_action')}[/{color}]"
+                        )
+                    except Exception:
+                        pass
+                await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+
     async def close(self):
+        if self.pubsub_task:
+            self.pubsub_task.cancel()
+            try:
+                await self.pubsub_task
+            except asyncio.CancelledError:
+                pass
         if self.redis_client:
             await self.redis_client.close()
         if self.http_client:
@@ -52,7 +87,7 @@ class TrafficDispatcher:
 
     async def dispatch_event(self, event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Dispatches a single event to target destination.
+        Dispatches a single event to target destination (Redis queue or HTTP).
         """
         if self.target_mode == "redis":
             raw = json.dumps(event)
@@ -69,7 +104,7 @@ class TrafficDispatcher:
         self,
         scenario_name: str,
         events: List[Dict[str, Any]],
-        delay_seconds: float = 0.8
+        delay_seconds: float = 0.5
     ):
         """
         Executes a sequence of scenario events and renders a real-time terminal monitor.
@@ -88,6 +123,7 @@ class TrafficDispatcher:
         table.add_column("Gateway Assessment", justify="right")
         table.add_column("Policy Action", justify="right")
 
+        last_assessment = None
         for idx, evt in enumerate(events, 1):
             detail = evt.get("filename") or evt.get("url") or evt.get("activity") or str(evt.get("size"))
             if len(str(detail)) > 38:
@@ -98,12 +134,13 @@ class TrafficDispatcher:
             # Format assessment column
             if self.target_mode == "http" and response and "assessment" in response:
                 ass = response["assessment"]
+                last_assessment = ass
                 score = ass.get("risk_score", 0.0)
                 status = ass.get("status", "NORMAL")
                 action = ass.get("policy_action", "ALLOW")
 
                 color = "green" if status == "NORMAL" else ("yellow" if status == "SUSPICIOUS" else "bold red")
-                action_color = "green" if action == "ALLOW" else ("yellow" if action == "MONITOR" else "bold red")
+                action_color = "green" if action == "ALLOW" else ("yellow" if action == "ALERT_ADMIN" else "bold red")
 
                 table.add_row(
                     str(idx),
@@ -119,11 +156,18 @@ class TrafficDispatcher:
                     evt.get("event_type", ""),
                     evt.get("user", ""),
                     str(detail),
-                    "[green]Pushed to Queue[/green]",
-                    "[dim]Async Worker[/dim]"
+                    "[green]Pushed to Broker[/green]",
+                    "[dim]5-Min Window[/dim]"
                 )
 
             await asyncio.sleep(delay_seconds)
 
         console.print(table)
+        
+        # Display top deviations if available
+        if last_assessment and last_assessment.get("top_deviations"):
+            console.print("[bold yellow]🔍 Top ML Baseline Deviations:[/bold yellow]")
+            for dev in last_assessment["top_deviations"]:
+                console.print(f"  • {dev}")
+
         console.print(f"[bold green]✓ Scenario '{scenario_name}' completed successfully![/bold green]\n")

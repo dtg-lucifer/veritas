@@ -1,8 +1,8 @@
 """
 AI/ML Security Model Predictor.
-Loads trained models from ml/models and evaluates behavioral feature vectors.
-Supports both fast-path composite triage (LightGBM + Baseline + Isolation Forest)
-and full multi-model deep inference.
+Loads trained models from ml/models and evaluates 5-minute behavioral feature vectors
+using the 4-model ensemble (LightGBM + Statistical Baseline + Isolation Forest + PyTorch Autoencoder).
+Implements the multi-model risk fusion formula and policy mappings from WORKFLOW.md.
 """
 
 import sys
@@ -26,19 +26,19 @@ class SecurityModelPredictor:
     def __init__(self):
         self.feature_cols = get_feature_columns()
 
-        # 1. Supervised Gradient Boosted Classifier (LightGBM) - Primary Fast Detector
+        # 1. Supervised Gradient Boosted Classifier (LightGBM) - Threat Classifier (w1 = 0.40)
         gb_path = MODELS_DIR / "behavioral_classifier.joblib"
         self.gb_model = joblib.load(gb_path) if gb_path.exists() else None
 
-        # 2. Statistical Baseline Profiler - O(1) Table Lookup
+        # 2. Statistical Baseline Profiler - User Baseline Z-Scores (w2 = 0.25)
         baseline_path = MODELS_DIR / "baseline_profiler.joblib"
         self.baseline_model = joblib.load(baseline_path) if baseline_path.exists() else None
 
-        # 3. Isolation Forest - Fast Decision Tree Traversal
+        # 3. Isolation Forest - Unsupervised Decision Trees (w3 = 0.20)
         if_path = MODELS_DIR / "isolation_forest.joblib"
         self.if_model = joblib.load(if_path) if if_path.exists() else None
 
-        # 4. Deep Autoencoder (Optional non-linear pass)
+        # 4. Deep PyTorch Autoencoder - Reconstruction Error (w4 = 0.15)
         ae_path = MODELS_DIR / "autoencoder.pt"
         ae_meta_path = MODELS_DIR / "autoencoder_meta.joblib"
         self.ae_model = None
@@ -49,18 +49,18 @@ class SecurityModelPredictor:
             except Exception as e:
                 print(f"[Predictor] Warning loading PyTorch Autoencoder: {e}")
 
-        print("✓ SecurityModelPredictor successfully initialized with trained ML models.")
+        print("✓ SecurityModelPredictor successfully initialized with 4-model ML ensemble.")
 
     def evaluate_features(
         self,
         user: str,
         date_str: str,
         feature_dict: Dict[str, float],
-        include_autoencoder: bool = False
+        include_autoencoder: bool = True
     ) -> Dict[str, Any]:
         """
-        Fast composite evaluation combining LightGBM, Statistical Baselines, and Isolation Forest.
-        Total execution time: <1.0 ms per record.
+        Ensemble evaluation combining LightGBM, Statistical Baseline, Isolation Forest, and Deep Autoencoder.
+        Computes the Composite Risk Score (0 - 100) and maps to automated firewall policies.
         """
         # Ensure all required feature columns exist with 0.0 default
         complete_features = {col: 0.0 for col in self.feature_cols}
@@ -83,32 +83,38 @@ class SecurityModelPredictor:
         s_if = float(self.if_model.predict_anomaly_scores(df_single)[0]) if self.if_model else 0.0
         if_exps = self.if_model.explain_record(complete_features) if self.if_model else []
 
-        # 4. Optional Autoencoder score
+        # 4. Deep Autoencoder score (Reconstruction Loss)
         s_ae = 0.0
+        ae_exps = []
         if include_autoencoder and self.ae_model:
-            s_ae = float(self.ae_model.predict_anomaly_scores(df_single)[0])
+            try:
+                s_ae = float(self.ae_model.predict_anomaly_scores(df_single)[0])
+                ae_exps = self.ae_model.explain_record(complete_features)
+            except Exception:
+                s_ae = 0.0
 
-        # Composite Fast Risk Formula (0 - 100)
-        if include_autoencoder:
-            w_gb, w_base, w_if, w_ae = 0.55, 0.15, 0.15, 0.15
+        # Multi-Model Risk Fusion Formula (from WORKFLOW.md)
+        # Composite Risk = 100 * (w1 * s_gb + w2 * s_base + w3 * s_if + w4 * s_ae)
+        if include_autoencoder and self.ae_model:
+            w_gb, w_base, w_if, w_ae = 0.40, 0.25, 0.20, 0.15
             composite_prob = (w_gb * s_gb + w_base * s_base + w_if * s_if + w_ae * s_ae)
         else:
-            w_gb, w_base, w_if = 0.60, 0.25, 0.15
+            w_gb, w_base, w_if = 0.50, 0.30, 0.20
             composite_prob = (w_gb * s_gb + w_base * s_base + w_if * s_if)
 
         risk_score = round(float(composite_prob * 100.0), 1)
         risk_score = min(100.0, max(0.0, risk_score))
 
-        # Enforce Policy Mapping
-        if risk_score >= 80.0 or s_gb >= 0.85:
+        # Enforce Policy Mapping according to WORKFLOW.md Matrix
+        # Level 3: CRITICAL (Risk >= 70 or severe high-confidence model triggers)
+        if risk_score >= 70.0 or s_gb >= 0.80 or (s_base >= 0.95 and s_if >= 0.60):
             status = "CRITICAL"
             action = "ISOLATE_DEVICE"
-        elif risk_score >= 55.0 or s_gb >= 0.60:
+        # Level 2: SUSPICIOUS (40 <= Risk < 70 or elevated supervised probability)
+        elif risk_score >= 40.0 or s_gb >= 0.45 or s_base >= 0.85:
             status = "SUSPICIOUS"
             action = "ALERT_ADMIN"
-        elif risk_score >= 30.0:
-            status = "LOW RISK"
-            action = "MONITOR"
+        # Level 1: NORMAL (Risk < 40)
         else:
             status = "NORMAL"
             action = "ALLOW"
@@ -123,9 +129,12 @@ class SecurityModelPredictor:
         for exp in if_exps[:2]:
             if not any(exp["feature"] in d for d in deviations):
                 deviations.append(exp["message"])
+        for exp in ae_exps[:2]:
+            if not any(exp["feature"] in d for d in deviations):
+                deviations.append(exp["message"])
 
-        if not deviations and risk_score >= 50.0:
-            deviations.append("Multivariate anomaly across low-level network traffic features")
+        if not deviations and risk_score >= 40.0:
+            deviations.append("Multivariate anomaly across low-level 5-minute network traffic features")
 
         return {
             "user": user,
@@ -137,7 +146,7 @@ class SecurityModelPredictor:
                 "supervised_threat_score": round(s_gb, 3),
                 "baseline_deviation_score": round(s_base, 3),
                 "isolation_forest_score": round(s_if, 3),
-                "autoencoder_reconstruction_score": round(s_ae, 3) if include_autoencoder else None
+                "autoencoder_reconstruction_score": round(s_ae, 3) if include_autoencoder and self.ae_model else None
             },
             "top_deviations": deviations[:4],
             "feature_snapshot": complete_features
