@@ -124,13 +124,19 @@ export function Dashboard() {
           }));
 
           // Trigger toast notification based on classification
+          const description = newAlert.top_deviations && newAlert.top_deviations.length > 0 
+            ? newAlert.top_deviations[0] 
+            : newAlert.message;
+
           if (newAlert.classification === "SUSPICIOUS") {
             toast.warning(`Suspicious Activity: ${newAlert.user}`, {
-              description: newAlert.message,
+              description: description,
+              duration: 10000,
             });
           } else if (newAlert.classification === "CRITICAL") {
             toast.error(`Critical Threat: ${newAlert.user}`, {
-              description: newAlert.message,
+              description: description,
+              duration: 10000,
             });
           }
         }

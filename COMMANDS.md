@@ -19,6 +19,10 @@ uv run python simulate.py --mode normal
 ```
 
 ```bash
+uv run python simulate.py --mode mild
+```
+
+```bash
 uv run python simulate.py --mode suspicious --multiplier 5 --attack-type wikileaks
 
 sudo uv run python simulate.py --mode suspicious --multiplier 5 --attack-type wikileaks --redis-url redis://default:2UXpJQ3Dqy5jUTtW4U9SDCxKq5wyPe79@redis-14713.crce283.ap-south-1-2.ec2.cloud.redislabs.com:14713/0

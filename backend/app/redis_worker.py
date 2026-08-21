@@ -20,12 +20,15 @@ from typing import Optional, Dict, Any, Callable, List
 from datetime import datetime, timezone
 import redis
 from rich.console import Console
+from dotenv import load_dotenv
+
+load_dotenv()
 
 console = Console()
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 REDIS_QUEUE_KEY = os.getenv("REDIS_QUEUE_KEY", "network_logs_queue")
-ALERT_THRESHOLD = float(os.getenv("ALERT_THRESHOLD", "65.0"))
+ALERT_THRESHOLD = float(os.getenv("ALERT_THRESHOLD", "35.0"))
 WINDOW_SECONDS = int(os.getenv("WINDOW_SECONDS", "300"))
 
 

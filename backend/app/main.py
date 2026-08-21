@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 import asyncio
 import json
 import os
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +20,8 @@ from rich.console import Console
 from app.predictor import SecurityModelPredictor
 from app.log_buffer import TimeWindowLogAggregator
 from app.redis_worker import MultithreadedRedisLogWorker, REDIS_URL, REDIS_QUEUE_KEY, ALERT_THRESHOLD, WINDOW_SECONDS
+
+load_dotenv()
 
 console = Console()
 
