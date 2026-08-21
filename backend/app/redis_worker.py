@@ -246,9 +246,15 @@ class MultithreadedRedisLogWorker:
 
             # Push to WebSocket ONLY if above threshold
             if risk >= self.alert_threshold:
+                alert_payload = {
+                    "type": "SECURITY_INCIDENT_ALERT",
+                    "alert": assessment,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+
                 with self._lock:
                     self.alerts_generated += 1
-                    self.alerts_list.insert(0, assessment)
+                    self.alerts_list.insert(0, alert_payload)
                     if len(self.alerts_list) > 100:
                         self.alerts_list.pop()
 
