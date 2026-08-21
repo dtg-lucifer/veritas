@@ -17,6 +17,10 @@ uv run python simulate.py --mode normal
 ```
 
 ```bash
+uv run python simulate.py --mode mild
+```
+
+```bash
 uv run python simulate.py --mode suspicious --multiplier 5 --attack-type wikileaks
 ```
 

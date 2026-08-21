@@ -40,7 +40,7 @@ function AlertCard({ alert }: { alert: Alert }) {
       case "CRITICAL":
         return "border-red-200 bg-red-50 hover:bg-red-100";
       case "SUSPICIOUS":
-        return "border-orange-200 bg-orange-50 hover:bg-orange-100";
+        return "border-yellow-200 bg-yellow-50 hover:bg-yellow-100";
       default:
         return "border-gray-200 bg-white hover:bg-gray-50 shadow-sm";
     }
@@ -77,7 +77,7 @@ function AlertCard({ alert }: { alert: Alert }) {
             {alert.classification}
           </Badge>
           <Badge variant="outline" className="bg-gray-100 border-gray-200 font-mono text-xs text-slate-700">
-            Score: <span className={alert.risk_score > 75 ? "text-red-500 ml-1 font-bold" : alert.risk_score > 35 ? "text-orange-500 ml-1 font-bold" : "text-green-600 ml-1 font-bold"}>{alert.risk_score.toFixed(1)}</span>
+            Score: <span className={alert.risk_score > 75 ? "text-red-500 ml-1 font-bold" : alert.risk_score >= 35 ? "text-yellow-600 ml-1 font-bold" : "text-green-600 ml-1 font-bold"}>{alert.risk_score.toFixed(1)}</span>
           </Badge>
           {expanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
         </div>
@@ -107,7 +107,7 @@ function AlertCard({ alert }: { alert: Alert }) {
                   <ul className="space-y-1.5">
                     {alert.top_deviations.map((dev, i) => (
                       <li key={i} className="bg-gray-50 p-2 rounded border border-gray-200 text-xs text-slate-700 flex items-start gap-2 shadow-sm">
-                        <span className="text-orange-500 font-bold mt-0.5">•</span>
+                        <span className="text-yellow-500 font-bold mt-0.5">•</span>
                         <span>{dev}</span>
                       </li>
                     ))}

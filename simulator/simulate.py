@@ -19,7 +19,7 @@ SIM_DIR = Path(__file__).resolve().parent
 if str(SIM_DIR) not in sys.path:
     sys.path.insert(0, str(SIM_DIR))
 
-from scenarios import generate_normal_stream, generate_suspicious_stream
+from scenarios import generate_normal_stream, generate_suspicious_stream, generate_mild_suspicious_stream
 from traffic_generator import TrafficDispatcher
 
 app = typer.Typer(help="🛡️ Internal Firewall - Dual-Mode Traffic & Threat Simulator")
@@ -65,6 +65,20 @@ async def run_simulation(
                 border_style="green"
             ))
 
+        elif mode.lower() == "mild":
+            events = generate_mild_suspicious_stream(user=user)
+            await dispatcher.run_scenario(
+                scenario_name=f"Mild Suspicious Activity (User: {user})",
+                events=events,
+                delay_seconds=delay
+            )
+            console.print(Panel.fit(
+                "[bold yellow]⚠️ Mild Suspicious Stream Completed[/bold yellow]\n"
+                f"[white]Injected {len(events)} mild anomalous events into Redis queue '{redis_queue}'.[/white]\n"
+                "[cyan]Expected 5-Min Rolling Assessment: Risk Score 35-64 (SUSPICIOUS)[/cyan]",
+                border_style="yellow"
+            ))
+
         elif mode.lower() in ["suspicious", "attack", "anomaly"]:
             events = generate_suspicious_stream(
                 user=user,
@@ -93,7 +107,7 @@ async def run_simulation(
 
 @app.command()
 def main(
-    mode: str = typer.Option("normal", "--mode", "-m", help="Operation mode: 'normal' or 'suspicious'"),
+    mode: str = typer.Option("normal", "--mode", "-m", help="Operation mode: 'normal', 'mild', or 'suspicious'"),
     multiplier: int = typer.Option(5, "--multiplier", "-x", help="Burst multiplier for suspicious mode (3 to 10)"),
     attack_type: str = typer.Option("wikileaks", "--attack-type", "-a", help="Suspicious vector: wikileaks, cloud_exfil, hacking_tools, job_theft"),
     user: Optional[str] = typer.Option(None, "--user", "-u", help="User identity (default: EMP-NORM-01 for normal, AAM0658 for suspicious)"),
@@ -106,7 +120,7 @@ def main(
     """
     Simulates enterprise baseline traffic (Normal Mode) or 3x-10x insider threat attack (Suspicious Mode).
     """
-    resolved_user = user or ("EMP-NORM-01" if mode.lower() == "normal" else "AAM0658")
+    resolved_user = user or ("EMP-NORM-01" if mode.lower() == "normal" else ("EMP-MILD-01" if mode.lower() == "mild" else "AAM0658"))
 
     asyncio.run(run_simulation(
         mode=mode,

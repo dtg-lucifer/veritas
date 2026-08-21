@@ -24,6 +24,56 @@ from datetime import datetime, timedelta, timezone
 import random
 import uuid
 
+def generate_mild_suspicious_stream(
+    user: str = "EMP-MILD-01",
+    ip: str = "10.0.2.55",
+    request_count: int = 75,
+    base_time: Optional[datetime] = None
+) -> List[Dict[str, Any]]:
+    """
+    Generates mildly anomalous traffic to trigger a SUSPICIOUS alert (Risk 35-64).
+    - Slightly elevated request count (75).
+    - Some larger downloads but not extreme.
+    - Mostly normal URLs but maybe a few non-standard ones.
+    - No critical overrides triggered (No USB, No extreme after-hours data hoarding).
+    """
+    if base_time is None:
+        base_time = datetime.now(timezone.utc)
+
+    events: List[Dict[str, Any]] = []
+
+    for i in range(request_count):
+        ts = (base_time + timedelta(milliseconds=i * 20)).isoformat()
+        
+        # 1 in 5 requests is to a job theft or cloud exfil site
+        if i % 5 == 0:
+            url = random.choice(SUSPICIOUS_SENSITIVE_URLS["job_theft"] + SUSPICIOUS_SENSITIVE_URLS["cloud_exfil"])
+            size_bytes = float(random.randint(1_000_000, 5_000_000))
+        else:
+            url = random.choice(NORMAL_ENTERPRISE_URLS)
+            size_bytes = float(random.randint(50_000, 200_000))
+
+        events.append({
+            "event_id": f"mild-http-{uuid.uuid4().hex[:8]}",
+            "timestamp": ts,
+            "user": user,
+            "src_ip": ip,
+            "dst_ip": "142.250.190.46",
+            "src_port": 50000 + i,
+            "dst_port": 443,
+            "protocol": "TCP",
+            "event_type": "http",
+            "activity": f"GET {url[:50]}",
+            "url": url,
+            "size": size_bytes,
+            "download_bytes": size_bytes,
+            "upload_bytes": 1024.0,
+            "is_after_hours": True
+        })
+
+    events.sort(key=lambda x: x["timestamp"])
+    return events
+
 
 # Legitimate enterprise URLs for Normal Mode
 NORMAL_ENTERPRISE_URLS = [
