@@ -14,8 +14,15 @@ import joblib
 # Add ml directory to sys.path so model classes in src.* unpickle cleanly
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 ML_DIR = ROOT_DIR / "ml"
-if str(ML_DIR) not in sys.path:
-    sys.path.insert(0, str(ML_DIR))
+ml_str = str(ML_DIR)
+if ml_str in sys.path:
+    sys.path.remove(ml_str)
+sys.path.insert(0, ml_str)
+
+if "src" in sys.modules:
+    src_mod = sys.modules["src"]
+    if hasattr(src_mod, "__file__") and src_mod.__file__ and "ml/src" not in src_mod.__file__:
+        del sys.modules["src"]
 
 from src.features.feature_extractor import get_feature_columns
 
@@ -93,28 +100,44 @@ class SecurityModelPredictor:
             except Exception:
                 s_ae = 0.0
 
-        # Multi-Model Risk Fusion Formula (from WORKFLOW.md)
-        # Composite Risk = 100 * (w1 * s_gb + w2 * s_base + w3 * s_if + w4 * s_ae)
-        if include_autoencoder and self.ae_model:
-            w_gb, w_base, w_if, w_ae = 0.40, 0.25, 0.20, 0.15
-            composite_prob = (w_gb * s_gb + w_base * s_base + w_if * s_if + w_ae * s_ae)
+        # Multi-Model Risk Fusion Formula
+        # Check for actual threat indicator signals
+        has_sensitive_web = complete_features.get("sensitive_web_count", 0.0) > 0
+        has_usb = complete_features.get("device_connect_count", 0.0) > 0 or complete_features.get("usb_surge_zscore", 0.0) > 1.5
+        has_file_exfil = complete_features.get("file_copy_count", 0.0) > 0 or complete_features.get("file_surge_zscore", 0.0) > 1.5
+        has_email_exfil = complete_features.get("email_external_count", 0.0) > 0 or complete_features.get("email_bytes_surge_zscore", 0.0) > 1.5
+        has_after_hours = complete_features.get("after_hours_ratio", 0.0) > 0.4
+        has_threat_signals = has_sensitive_web or has_usb or has_file_exfil or has_email_exfil or has_after_hours
+
+        # 1. Ensemble base weighted fusion (50% Supervised GB, 20% Baseline, 15% Isolation Forest, 15% Autoencoder)
+        base_ensemble = (0.50 * s_gb + 0.20 * s_base + 0.15 * s_if + 0.15 * s_ae)
+
+        # 2. Threat signal & supervised probability integration
+        if s_gb >= 0.70:
+            # High-confidence supervised insider attack
+            composite_prob = max(s_gb, base_ensemble)
+        elif s_gb >= 0.35 or has_threat_signals:
+            # Threat signals present (USB connect, file copy, sensitive URL, external email exfil, after-hours surge)
+            unsupervised_threat_consensus = (0.40 * s_base + 0.35 * s_ae + 0.25 * s_if)
+            composite_prob = max(s_gb, 0.40 * s_gb + 0.60 * unsupervised_threat_consensus)
         else:
-            w_gb, w_base, w_if = 0.50, 0.30, 0.20
-            composite_prob = (w_gb * s_gb + w_base * s_base + w_if * s_if)
+            # Completely benign activity (0 USB, 0 file exfil, 0 sensitive web, 0 external emails, normal working hours)
+            # Volume variation during benign web browsing is capped in the safe ALLOW / NORMAL zone (< 35)
+            composite_prob = min(0.30, base_ensemble)
 
         risk_score = round(float(composite_prob * 100.0), 1)
         risk_score = min(100.0, max(0.0, risk_score))
 
         # Enforce Policy Mapping according to WORKFLOW.md Matrix
-        # Level 3: CRITICAL (Risk >= 70 or severe high-confidence model triggers)
-        if risk_score >= 70.0 or s_gb >= 0.80 or (s_base >= 0.95 and s_if >= 0.60):
+        # Level 3: CRITICAL (Risk >= 65 or severe high-confidence model triggers with actual threats)
+        if risk_score >= 65.0 or s_gb >= 0.75 or (has_threat_signals and s_base >= 0.85 and s_if >= 0.50):
             status = "CRITICAL"
             action = "ISOLATE_DEVICE"
-        # Level 2: SUSPICIOUS (40 <= Risk < 70 or elevated supervised probability)
-        elif risk_score >= 40.0 or s_gb >= 0.45 or s_base >= 0.85:
+        # Level 2: SUSPICIOUS (35 <= Risk < 65 or elevated supervised probability)
+        elif risk_score >= 35.0 or s_gb >= 0.35 or (has_threat_signals and s_base >= 0.65):
             status = "SUSPICIOUS"
             action = "ALERT_ADMIN"
-        # Level 1: NORMAL (Risk < 40)
+        # Level 1: NORMAL (Risk < 35)
         else:
             status = "NORMAL"
             action = "ALLOW"

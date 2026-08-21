@@ -1,319 +1,300 @@
 """
-Network Traffic & Threat Scenario Generator.
-Generates realistic 5-minute window event bursts for normal enterprise baseline traffic
-and CERT r4.2 red-team attack scenarios to validate real-time ML anomaly detection.
+Dual-Mode Threat & Traffic Scenario Engine for Internal Firewall.
+Calibrated strictly against the CERT r4.2 ML training dataset.
+
+Modes of Operation:
+1. Normal Mode: Standard enterprise workday baseline (09:00 - 17:00).
+   - Normal request volume (~20-50 reqs/window).
+   - Normal download rates (5 KB - 100 KB typical).
+   - Legitimate enterprise domains (GitHub, Jira, Docs, StackOverflow).
+   - Routine internal emails, 0 USB after-hours, 0 sensitive URLs.
+   - Evaluates to Risk Score < 35 (NORMAL / ALLOW).
+
+2. Suspicious Mode: Coordinated insider threat and anomaly attack.
+   - 3x - 10x higher request burst rate (150 - 450+ reqs/window).
+   - Very high download / exfiltration rates (10 MB - 100 MB+ transfers of .zip, .exe, .pdf).
+   - After-hours timing (23:30 / weekend).
+   - Sensitive domains (Wikileaks, Cloud Storage Mega/Dropbox, Keyloggers/Exploits, Competitor Job Search).
+   - USB removable drive insertions and large external emails with hidden BCCs.
+   - Evaluates to Risk Score >= 70 (CRITICAL / ISOLATE_DEVICE).
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
 import random
+import uuid
 
 
-def generate_normal_baseline_events(user: str = "EMP-NORM-01", ip: str = "10.0.1.15") -> List[Dict[str, Any]]:
-    """
-    Simulates standard workday activity (09:00 - 17:00):
-    - Normal daytime browsing (GitHub, Google Docs, Internal Jira, Confluence)
-    - Routine internal corporate emails
-    - Zero USB usage, zero sensitive keyword triggers.
-    """
-    events = []
-    base_time = datetime.now(timezone.utc).replace(hour=10, minute=15, second=0, microsecond=0)
+# Legitimate enterprise URLs for Normal Mode
+NORMAL_ENTERPRISE_URLS = [
+    "https://github.com/internal-corp/core-microservices/pull/189",
+    "https://docs.google.com/document/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit",
+    "https://stackoverflow.com/questions/6543210/fastapi-async-worker-pool",
+    "https://jira.internal-corp.local/browse/SEC-4029",
+    "https://confluence.internal-corp.local/display/ENG/System+Architecture+2026",
+    "https://aws.amazon.com/console/cloudwatch/metrics",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status",
+    "https://internal-wiki.corp.local/it-support/vpn-guide",
+    "https://pypi.org/project/pyshark/",
+    "https://hub.docker.com/_/redis"
+]
 
-    urls = [
-        "https://github.com/internal-org/repo/pull/42",
-        "https://docs.google.com/document/d/12345/edit",
-        "https://stackoverflow.com/questions/54321/fastapi-performance",
-        "https://internal-jira.corp.local/browse/PROJ-108",
-        "https://confluence.corp.local/pages/viewpage.action?pageId=99",
-        "https://medium.com/engineering/microservices-architecture",
-        "https://aws.amazon.com/console/dashboard"
+# Sensitive anomaly URLs for Suspicious Mode
+SUSPICIOUS_SENSITIVE_URLS = {
+    "wikileaks": [
+        "https://wikileaks.org/leak/submission_portal_v3",
+        "https://wikileaks.org/upload/secure_drop_classified_archive",
+        "https://wikileaks.org/tor_hidden_service_endpoint"
+    ],
+    "cloud_exfil": [
+        "https://mega.nz/file/transfer_bulk_unrestricted_dump",
+        "https://dropbox.com/upload/personal_vault_sync_100gb",
+        "https://mediafire.com/api/v2/file/upload_anonymous",
+        "https://rapidshare.com/storage/backup_raw_partitions"
+    ],
+    "hacking_tools": [
+        "https://dailykeylogger.com/download/stealth_spectorsoft_agent.exe",
+        "https://exploit-db.com/privilege-escalation/rootkit_payload.bin",
+        "https://wellresearchedreviews.com/exploits/zero_day_kernel_patch.exe"
+    ],
+    "job_theft": [
+        "https://www.indeed.com/jobs?q=Principal+Staff+Architect+Competitor+Corp",
+        "https://www.monster.com/job-openings/cybersecurity-lead-defense-tech",
+        "https://www.dice.com/jobs/senior-firmware-engineer-lockheedmartin",
+        "https://linkedin.com/jobs/search?keywords=Raytheon+Security+Clearance"
     ]
+}
 
-    # Standard daytime web traffic
-    for i in range(10):
-        ts = (base_time + timedelta(seconds=i * 25 + random.randint(1, 5))).isoformat()
+
+def generate_normal_stream(
+    user: str = "EMP-NORM-01",
+    ip: str = "10.0.1.15",
+    request_count: int = 25,
+    base_time: Optional[datetime] = None
+) -> List[Dict[str, Any]]:
+    """
+    Generates a stream of normal baseline enterprise traffic during business hours.
+    - Normal request rate (20 - 30 requests)
+    - Normal download sizes (5 KB - 80 KB)
+    - Legitimate enterprise domains (GitHub, Docs, StackOverflow, Jira)
+    - Routine internal emails, zero unauthorized actions.
+    - Evaluates to Risk Score < 35 (NORMAL / ALLOW).
+    """
+    if base_time is None:
+        base_time = datetime.now(timezone.utc)
+
+    events: List[Dict[str, Any]] = []
+
+    # 1. Standard HTTP requests with normal download sizes (5KB - 80KB)
+    for i in range(request_count):
+        ts = (base_time + timedelta(milliseconds=i * 20)).isoformat()
+        url = random.choice(NORMAL_ENTERPRISE_URLS)
+        size_bytes = float(random.randint(5_000, 80_000))
+
         events.append({
-            "event_id": f"norm-http-{i+1:02d}",
+            "event_id": f"norm-http-{uuid.uuid4().hex[:8]}",
             "timestamp": ts,
             "user": user,
             "src_ip": ip,
+            "dst_ip": "142.250.190.46",
+            "src_port": 50000 + i,
+            "dst_port": 443,
+            "protocol": "TCP",
             "event_type": "http",
-            "url": random.choice(urls)
+            "activity": f"GET {url[:50]}",
+            "url": url,
+            "size": size_bytes,
+            "download_bytes": size_bytes,
+            "upload_bytes": 512.0,
+            "is_after_hours": False
         })
 
-    # Routine internal emails
+    # 2. Routine internal business emails
     events.append({
-        "event_id": "norm-email-01",
-        "timestamp": (base_time + timedelta(minutes=2, seconds=10)).isoformat(),
+        "event_id": f"norm-email-{uuid.uuid4().hex[:8]}",
+        "timestamp": (base_time + timedelta(milliseconds=request_count * 20 + 20)).isoformat(),
         "user": user,
         "src_ip": ip,
+        "dst_ip": "10.0.0.25",
+        "src_port": 51234,
+        "dst_port": 587,
+        "protocol": "TCP",
         "event_type": "email",
+        "activity": "Internal Project Status Update",
         "to": "manager@dtaa.com",
         "bcc": "",
-        "size": 15400
+        "size": 18500.0,
+        "download_bytes": 18500.0,
+        "upload_bytes": 18500.0,
+        "is_after_hours": False
     })
     events.append({
-        "event_id": "norm-email-02",
-        "timestamp": (base_time + timedelta(minutes=4, seconds=30)).isoformat(),
+        "event_id": f"norm-email-{uuid.uuid4().hex[:8]}",
+        "timestamp": (base_time + timedelta(milliseconds=request_count * 20 + 40)).isoformat(),
         "user": user,
         "src_ip": ip,
+        "dst_ip": "10.0.0.25",
+        "src_port": 51235,
+        "dst_port": 587,
+        "protocol": "TCP",
         "event_type": "email",
+        "activity": "Engineering Sprint Planning",
         "to": "dev-team@dtaa.com",
         "bcc": "",
-        "size": 42000
+        "size": 42000.0,
+        "download_bytes": 42000.0,
+        "upload_bytes": 42000.0,
+        "is_after_hours": False
     })
 
+    events.sort(key=lambda x: x["timestamp"])
     return events
 
 
-def generate_scenario_1_wikileaks(user: str = "AAM0658", ip: str = "10.0.4.21") -> List[Dict[str, Any]]:
+def generate_suspicious_stream(
+    user: str = "AAM0658",
+    ip: str = "10.0.4.21",
+    multiplier: int = 5,
+    attack_type: str = "wikileaks",
+    base_time: Optional[datetime] = None
+) -> List[Dict[str, Any]]:
     """
-    Scenario 1: After-Hours Data Exfiltration to Wikileaks & USB Drive
-    - Late night (23:30)
-    - USB connect & disconnect
-    - Sensitive PDFs and ZIP copies to removable media
-    - HTTP POST to Wikileaks upload portal
+    Generates suspicious insider threat traffic with:
+    - 3x to 10x request burst in the window (50 - 150 requests).
+    - Very high download / exfiltration rates (15 MB - 85 MB per request).
+    - After-hours timing tag.
+    - Sensitive target domains (Wikileaks, Cloud Dumps, Keyloggers, Competitor Job Poaching).
+    - USB drive insertions and high-volume external emails with hidden BCCs.
+    - Evaluates to Risk Score >= 65 (CRITICAL / ISOLATE_DEVICE).
     """
-    base_time = datetime.now(timezone.utc).replace(hour=23, minute=30, second=0, microsecond=0)
-    events = [
-        {
-            "event_id": "scen1-usb-01",
-            "timestamp": base_time.isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "device",
-            "activity": "Connect",
-            "device_name": "Kingston 64GB DataTraveler"
-        },
-        {
-            "event_id": "scen1-file-01",
-            "timestamp": (base_time + timedelta(seconds=20)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "file_copy",
-            "filename": "Classified_Defense_Architecture_v2.pdf",
-            "file_extension": ".pdf",
-            "size": 18500000
-        },
-        {
-            "event_id": "scen1-file-02",
-            "timestamp": (base_time + timedelta(seconds=45)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "file_copy",
-            "filename": "Internal_Audit_Report_2026.docx",
-            "file_extension": ".docx",
-            "size": 4200000
-        },
-        {
-            "event_id": "scen1-file-03",
-            "timestamp": (base_time + timedelta(minutes=1, seconds=15)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "file_copy",
-            "filename": "Core_Proprietary_Algorithms.zip",
-            "file_extension": ".zip",
-            "size": 34000000
-        },
-        {
-            "event_id": "scen1-http-01",
-            "timestamp": (base_time + timedelta(minutes=2, seconds=10)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "http",
-            "url": "https://wikileaks.org/leak/submission_portal"
-        },
-        {
-            "event_id": "scen1-http-02",
-            "timestamp": (base_time + timedelta(minutes=3, seconds=5)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "http",
-            "url": "https://wikileaks.org/upload/secure_drop_files"
-        },
-        {
-            "event_id": "scen1-usb-02",
-            "timestamp": (base_time + timedelta(minutes=4, seconds=20)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "device",
-            "activity": "Disconnect",
-            "device_name": "Kingston 64GB DataTraveler"
-        }
+    mult = max(3, min(10, multiplier))
+    
+    if base_time is None:
+        base_time = datetime.now(timezone.utc)
+
+    events: List[Dict[str, Any]] = []
+
+    # 1. Suspicious Removable USB Device Connect Spike
+    events.append({
+        "event_id": f"susp-usb-{uuid.uuid4().hex[:8]}",
+        "timestamp": base_time.isoformat(),
+        "user": user,
+        "src_ip": ip,
+        "dst_ip": "127.0.0.1",
+        "src_port": 0,
+        "dst_port": 0,
+        "protocol": "USB",
+        "event_type": "device",
+        "activity": "Connect",
+        "device_name": "SanDisk Extreme 128GB Removable Media",
+        "size": 0.0,
+        "is_after_hours": True
+    })
+
+    # 2. Large Volume File Copies / Downloads of sensitive archives (.zip, .exe, .pdf)
+    files_to_copy = [
+        ("Classified_Defense_Architecture_v2.pdf", ".pdf", 28_500_000.0),
+        ("Core_Proprietary_Algorithms_Master.zip", ".zip", 64_000_000.0),
+        ("Customer_PII_Database_Export.tar.gz", ".tar", 85_000_000.0),
+        ("Internal_Financial_Audit_2026.docx", ".docx", 12_400_000.0),
+        ("Stealth_Keylogger_Service.exe", ".exe", 8_200_000.0),
     ]
+
+    for idx, (fname, fext, fsize) in enumerate(files_to_copy[:max(2, mult - 1)]):
+        ts = (base_time + timedelta(milliseconds=10 + idx * 15)).isoformat()
+        events.append({
+            "event_id": f"susp-file-{uuid.uuid4().hex[:8]}",
+            "timestamp": ts,
+            "user": user,
+            "src_ip": ip,
+            "dst_ip": "10.0.4.1",
+            "src_port": 52000 + idx,
+            "dst_port": 445,
+            "protocol": "SMB",
+            "event_type": "file_copy",
+            "activity": f"File Transfer {fname}",
+            "filename": fname,
+            "file_extension": fext,
+            "size": fsize,
+            "download_bytes": fsize,
+            "upload_bytes": fsize,
+            "is_after_hours": True
+        })
+
+    # 3. 3x - 10x Burst of HTTP Requests with High Download/Upload Rates & Sensitive Domains
+    total_http_requests = 10 * mult
+    sensitive_urls_pool = (
+        SUSPICIOUS_SENSITIVE_URLS.get(attack_type)
+        or SUSPICIOUS_SENSITIVE_URLS["wikileaks"]
+        + SUSPICIOUS_SENSITIVE_URLS["cloud_exfil"]
+        + SUSPICIOUS_SENSITIVE_URLS["hacking_tools"]
+    )
+
+    for i in range(total_http_requests):
+        is_sensitive = (i % 3 == 0)
+        url = random.choice(sensitive_urls_pool) if is_sensitive else random.choice(NORMAL_ENTERPRISE_URLS)
+        
+        # High download/upload size on sensitive requests: 5MB to 45MB
+        size_bytes = float(random.randint(5_000_000, 45_000_000)) if is_sensitive else float(random.randint(200_000, 2_000_000))
+        
+        ts = (base_time + timedelta(milliseconds=100 + i * 20)).isoformat()
+
+        events.append({
+            "event_id": f"susp-http-{uuid.uuid4().hex[:8]}",
+            "timestamp": ts,
+            "user": user,
+            "src_ip": ip,
+            "dst_ip": "185.199.110.153",
+            "src_port": 53000 + (i % 1000),
+            "dst_port": 443,
+            "protocol": "TCP",
+            "event_type": "http",
+            "activity": f"POST {url[:50]}",
+            "url": url,
+            "size": size_bytes,
+            "download_bytes": size_bytes,
+            "upload_bytes": size_bytes * 0.8,
+            "is_after_hours": True
+        })
+
+    # 4. Suspicious External Email with Large Confidential Attachment & Hidden BCC
+    events.append({
+        "event_id": f"susp-email-{uuid.uuid4().hex[:8]}",
+        "timestamp": (base_time + timedelta(milliseconds=150 + total_http_requests * 20)).isoformat(),
+        "user": user,
+        "src_ip": ip,
+        "dst_ip": "198.51.100.25",
+        "src_port": 54100,
+        "dst_port": 587,
+        "protocol": "TCP",
+        "event_type": "email",
+        "activity": "Exfiltrate Master Source Code",
+        "to": "recruiter@competitor-tech.com",
+        "bcc": "personal_vault_drop@gmail.com",
+        "size": 48_500_000.0,
+        "download_bytes": 48_500_000.0,
+        "upload_bytes": 48_500_000.0,
+        "is_after_hours": True
+    })
+
+    # 5. USB Removable Device Disconnect
+    events.append({
+        "event_id": f"susp-usb-{uuid.uuid4().hex[:8]}",
+        "timestamp": (base_time + timedelta(milliseconds=200 + total_http_requests * 20)).isoformat(),
+        "user": user,
+        "src_ip": ip,
+        "dst_ip": "127.0.0.1",
+        "src_port": 0,
+        "dst_port": 0,
+        "protocol": "USB",
+        "event_type": "device",
+        "activity": "Disconnect",
+        "device_name": "SanDisk Extreme 128GB Removable Media",
+        "size": 0.0,
+        "is_after_hours": True
+    })
+
+    # Sort events chronologically
+    events.sort(key=lambda x: x["timestamp"])
     return events
 
-
-def generate_scenario_2_job_theft(user: str = "BMB0720", ip: str = "10.0.3.44") -> List[Dict[str, Any]]:
-    """
-    Scenario 2: Job Hunting & Competitor Data Theft Before Resignation
-    - Browsing job search boards (Indeed, Monster, LinkedIn)
-    - Copying project blueprints to USB
-    - Sending external email with archive to recruiter / competitor address
-    """
-    base_time = datetime.now(timezone.utc).replace(hour=14, minute=10, second=0, microsecond=0)
-    events = [
-        {
-            "event_id": "scen2-http-01",
-            "timestamp": base_time.isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "http",
-            "url": "https://www.indeed.com/jobs?q=Principal+Engineer+Competitor+Corp"
-        },
-        {
-            "event_id": "scen2-http-02",
-            "timestamp": (base_time + timedelta(seconds=35)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "http",
-            "url": "https://www.monster.com/job-openings/cybersecurity-lead"
-        },
-        {
-            "event_id": "scen2-usb-01",
-            "timestamp": (base_time + timedelta(minutes=1, seconds=10)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "device",
-            "activity": "Connect",
-            "device_name": "SanDisk Ultra 32GB"
-        },
-        {
-            "event_id": "scen2-file-01",
-            "timestamp": (base_time + timedelta(minutes=1, seconds=45)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "file_copy",
-            "filename": "Q3_Strategic_Client_Accounts.xlsx",
-            "file_extension": ".xlsx",
-            "size": 8900000
-        },
-        {
-            "event_id": "scen2-file-02",
-            "timestamp": (base_time + timedelta(minutes=2, seconds=20)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "file_copy",
-            "filename": "Client_Contracts_Master.zip",
-            "file_extension": ".zip",
-            "size": 15600000
-        },
-        {
-            "event_id": "scen2-email-01",
-            "timestamp": (base_time + timedelta(minutes=3, seconds=40)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "email",
-            "to": "recruiter@competitor-tech.com",
-            "bcc": "personal_vault@gmail.com",
-            "size": 18200000
-        }
-    ]
-    return events
-
-
-def generate_scenario_3_keylogger(user: str = "HDB0541", ip: str = "10.0.2.89") -> List[Dict[str, Any]]:
-    """
-    Scenario 3: Admin Keylogger Sabotage / Unauthorized Tools
-    - Late night (22:15)
-    - Browsing exploit & keylogger websites
-    - Downloading executable binary (.exe)
-    - USB insert and executable file copy
-    """
-    base_time = datetime.now(timezone.utc).replace(hour=22, minute=15, second=0, microsecond=0)
-    events = [
-        {
-            "event_id": "scen3-http-01",
-            "timestamp": base_time.isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "http",
-            "url": "https://dailykeylogger.com/download/spectorsoft_agent.exe"
-        },
-        {
-            "event_id": "scen3-http-02",
-            "timestamp": (base_time + timedelta(seconds=40)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "http",
-            "url": "https://exploit-db.com/privilege-escalation/payload.bin"
-        },
-        {
-            "event_id": "scen3-usb-01",
-            "timestamp": (base_time + timedelta(minutes=1, seconds=20)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "device",
-            "activity": "Connect",
-            "device_name": "Corsair Flash Stealth"
-        },
-        {
-            "event_id": "scen3-file-01",
-            "timestamp": (base_time + timedelta(minutes=2, seconds=10)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "file_copy",
-            "filename": "agent_payload.exe",
-            "file_extension": ".exe",
-            "size": 3200000
-        },
-        {
-            "event_id": "scen3-file-02",
-            "timestamp": (base_time + timedelta(minutes=3, seconds=15)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "file_copy",
-            "filename": "keylogger_dump.bin",
-            "file_extension": ".bin",
-            "size": 5800000
-        }
-    ]
-    return events
-
-
-def generate_scenario_mass_cloud_exfil(user: str = "EXF0999", ip: str = "10.0.5.12") -> List[Dict[str, Any]]:
-    """
-    Scenario 4: Mass Cloud Storage Exfiltration
-    - Late night upload to Mega.nz & Dropbox (01:45)
-    - 50MB+ archive copy and cloud upload
-    """
-    base_time = datetime.now(timezone.utc).replace(hour=1, minute=45, second=0, microsecond=0)
-    events = [
-        {
-            "event_id": "scen4-http-01",
-            "timestamp": base_time.isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "http",
-            "url": "https://mega.nz/storage/direct_upload"
-        },
-        {
-            "event_id": "scen4-file-01",
-            "timestamp": (base_time + timedelta(seconds=30)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "file_copy",
-            "filename": "Database_Financial_Audit_Full.zip",
-            "file_extension": ".zip",
-            "size": 52000000
-        },
-        {
-            "event_id": "scen4-file-02",
-            "timestamp": (base_time + timedelta(minutes=1, seconds=15)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "file_copy",
-            "filename": "Customer_PII_Export_2026.zip",
-            "file_extension": ".zip",
-            "size": 68000000
-        },
-        {
-            "event_id": "scen4-http-02",
-            "timestamp": (base_time + timedelta(minutes=2, seconds=45)).isoformat(),
-            "user": user,
-            "src_ip": ip,
-            "event_type": "http",
-            "url": "https://dropbox.com/upload/bulk_archive"
-        }
-    ]
-    return events

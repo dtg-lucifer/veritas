@@ -1,13 +1,15 @@
 """
-Internal Firewall - FastAPI Gateway Backend with 5-Minute Window Redis Queue Worker.
-Provides REST prediction routes, 5-minute stateful window log ingestion, policy enforcement,
-Redis message broker consumer, and live WebSocket incident feeds for the SOC security dashboard.
+Internal Firewall - FastAPI Gateway Backend with Multithreaded 5-Minute Window Redis Queue Worker.
+Provides REST routes, 5-minute stateful window log aggregation, policy enforcement,
+multithreaded Redis message broker consumer, and live WebSocket incident feeds for the SOC security dashboard.
 """
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+import asyncio
 import json
+import os
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,14 +17,14 @@ from pydantic import BaseModel, Field
 from rich.console import Console
 
 from app.predictor import SecurityModelPredictor
-from app.log_buffer import RealTimeLogBuffer, TimeWindowLogAggregator
-from app.redis_worker import RedisLogQueueWorker, REDIS_URL, REDIS_QUEUE_KEY, ALERT_THRESHOLD
+from app.log_buffer import TimeWindowLogAggregator
+from app.redis_worker import MultithreadedRedisLogWorker, REDIS_URL, REDIS_QUEUE_KEY, ALERT_THRESHOLD, WINDOW_SECONDS
 
 console = Console()
 
 # Global in-memory components
 predictor = SecurityModelPredictor()
-log_buffer = TimeWindowLogAggregator(window_seconds=300)
+log_buffer = TimeWindowLogAggregator(window_seconds=WINDOW_SECONDS)
 recent_alerts: List[Dict[str, Any]] = []
 blocked_users_and_ips: Dict[str, Dict[str, Any]] = {}
 
@@ -36,14 +38,16 @@ class WebSocketHub:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        console.print(f"[green]✓ New dashboard WebSocket client connected. Active: {len(self.active_connections)}[/green]")
+        console.print(f"[bold green]✓ Dashboard / Postman WebSocket client connected. Active connections: {len(self.active_connections)}[/bold green]")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-            console.print(f"[yellow]Dashboard client disconnected. Active: {len(self.active_connections)}[/yellow]")
+            console.print(f"[yellow]Dashboard client disconnected. Active connections: {len(self.active_connections)}[/yellow]")
 
     async def broadcast(self, payload: dict):
+        if not self.active_connections:
+            return
         for connection in list(self.active_connections):
             try:
                 await connection.send_json(payload)
@@ -53,36 +57,38 @@ class WebSocketHub:
 ws_hub = WebSocketHub()
 
 
-# --- REDIS QUEUE WORKER SETUP ---
+# --- MULTITHREADED REDIS QUEUE WORKER SETUP ---
 
-redis_worker = RedisLogQueueWorker(
+redis_worker = MultithreadedRedisLogWorker(
     log_buffer=log_buffer,
     predictor=predictor,
     broadcast_callback=ws_hub.broadcast,
     alerts_list=recent_alerts,
     redis_url=REDIS_URL,
     queue_key=REDIS_QUEUE_KEY,
-    alert_threshold=ALERT_THRESHOLD
+    alert_threshold=ALERT_THRESHOLD,
+    window_seconds=WINDOW_SECONDS
 )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Launch Redis Queue Consumer & 5-Min Window Worker
-    await redis_worker.start()
+    # Startup: Launch Redis Queue Consumer & 5-minute Timer in dedicated background OS threads
+    running_loop = asyncio.get_running_loop()
+    redis_worker.start(loop=running_loop)
     yield
-    # Shutdown: Stop Worker Gracefully
-    await redis_worker.stop()
+    # Shutdown: Stop Worker Threads Gracefully
+    redis_worker.stop()
 
 
 app = FastAPI(
     title="🛡️ Internal Firewall - Security Gateway & Anomaly Backend",
-    description="SIH 2026: 5-Minute Behavioral Window Aggregation & Ensemble ML Anomaly Detection Gateway with Decoupled Redis Broker.",
+    description="SIH 2026: Multithreaded 5-Minute Behavioral Window Aggregation & Ensemble ML Anomaly Detection Gateway with Redis MQ.",
     version="1.0.0",
     lifespan=lifespan
 )
 
-# CORS middleware for Next.js / React Dashboard
+# CORS middleware for Next.js / React SOC Dashboard
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -96,20 +102,26 @@ app.add_middleware(
 
 class PredictRequest(BaseModel):
     user: str = Field(..., example="AAM0658")
-    timestamp: Optional[str] = Field(None, example="2026-08-19")
+    timestamp: Optional[str] = Field(None, example="2026-08-21")
     features: Dict[str, float] = Field(..., description="30-dimension behavioral feature dictionary")
 
 class NetworkLogEvent(BaseModel):
     event_id: Optional[str] = Field(None, example="evt-1001")
-    timestamp: Optional[str] = Field(None, example="2026-08-19T02:15:00Z")
+    timestamp: Optional[str] = Field(None, example="2026-08-21T10:15:00Z")
     user: str = Field(..., example="AAM0658")
     src_ip: Optional[str] = Field("10.0.4.21", example="10.0.4.21")
+    dst_ip: Optional[str] = Field("142.250.190.46", example="142.250.190.46")
+    src_port: Optional[int] = Field(52341, example=52341)
+    dst_port: Optional[int] = Field(443, example=443)
+    protocol: Optional[str] = Field("TCP", example="TCP")
     event_type: str = Field(..., example="http", description="http, device, file_copy, email, connection")
     activity: Optional[str] = Field(None, example="Connect")
     url: Optional[str] = Field(None, example="https://wikileaks.org/upload")
     filename: Optional[str] = Field(None, example="classified_database_dump.zip")
     file_extension: Optional[str] = Field(None, example=".zip")
     size: Optional[float] = Field(None, example=45000000)
+    download_bytes: Optional[float] = Field(None, example=45000000)
+    upload_bytes: Optional[float] = Field(None, example=1024)
     to: Optional[str] = Field(None, example="external@competitor.com")
     bcc: Optional[str] = Field(None, example="home@gmail.com")
 
@@ -124,42 +136,46 @@ class PolicyEnforceRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint confirming model status & Redis worker metrics."""
+    """Health check endpoint confirming model status & multithreaded Redis worker metrics."""
     return {
         "status": "healthy",
         "service": "Internal Firewall AI/ML Backend",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "models_ready": True,
         "active_ws_subscribers": len(ws_hub.active_connections),
+        "window_seconds": redis_worker.window_seconds,
+        "alert_threshold": redis_worker.alert_threshold,
         "redis_worker": {
             "queue": REDIS_QUEUE_KEY,
-            "processed_count": redis_worker.processed_count,
+            "consumer_thread": redis_worker._consumer_thread.name if redis_worker._consumer_thread else None,
+            "timer_thread": redis_worker._timer_thread.name if redis_worker._timer_thread else None,
+            "is_alive": redis_worker.is_running,
+            "ingested_count": redis_worker.ingested_count,
             "windows_evaluated": redis_worker.windows_evaluated,
             "alerts_generated": redis_worker.alerts_generated,
-            "alert_threshold": redis_worker.alert_threshold,
-            "is_running": redis_worker.is_running
         }
     }
 
 
 @app.get("/api/v1/redis/status")
 def get_redis_worker_status():
-    """Returns real-time queue processing statistics."""
+    """Returns real-time queue processing and worker thread statistics."""
     return {
         "redis_url": REDIS_URL,
         "queue_key": REDIS_QUEUE_KEY,
         "is_running": redis_worker.is_running,
-        "processed_count": redis_worker.processed_count,
+        "window_seconds": redis_worker.window_seconds,
+        "alert_threshold": redis_worker.alert_threshold,
+        "ingested_count": redis_worker.ingested_count,
         "windows_evaluated": redis_worker.windows_evaluated,
-        "alerts_generated": redis_worker.alerts_generated,
-        "alert_threshold": redis_worker.alert_threshold
+        "alerts_generated": redis_worker.alerts_generated
     }
 
 
 @app.post("/api/v1/predict")
 def predict_direct(payload: PredictRequest):
     """
-    Direct model evaluation endpoint for a pre-computed behavioral feature vector.
+    Direct model evaluation endpoint for a pre-computed 30-dimension behavioral feature vector.
     Uses full 4-model ensemble (LightGBM + Baseline + Isolation Forest + Autoencoder).
     """
     ts = payload.timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -170,35 +186,17 @@ def predict_direct(payload: PredictRequest):
 @app.post("/api/v1/logs/ingest")
 async def ingest_network_log(event: NetworkLogEvent):
     """
-    Direct HTTP Ingestion endpoint.
-    Buffers events into 5-minute stateful window, predicts anomaly risk with full multi-model ensemble,
-    and automatically broadcasts WebSocket alerts on suspicious / critical threats.
+    Direct HTTP Ingestion endpoint (Silent Ingest).
+    Buffers event into the user's 5-minute sliding window without immediate prediction.
+    Prediction occurs at the 5-minute timer cycle.
     """
     evt_dict = event.model_dump()
-    user, date_key, updated_features = log_buffer.ingest_event(evt_dict)
+    log_buffer.ingest(evt_dict)
     
-    assessment = predictor.evaluate_features(user, date_key, updated_features, include_autoencoder=True)
-    assessment["src_ip"] = event.src_ip
-    assessment["last_event_type"] = event.event_type
-    assessment["window_active_events"] = len(log_buffer.user_event_windows[user])
-
-    # If risk is elevated (Suspicious >= 40, Critical >= 70), broadcast alert in real-time
-    if assessment["risk_score"] >= ALERT_THRESHOLD or assessment["status"] in ["SUSPICIOUS", "CRITICAL"]:
-        recent_alerts.insert(0, assessment)
-        if len(recent_alerts) > 100:
-            recent_alerts.pop()
-        
-        # Broadcast alert payload to all connected frontend clients
-        await ws_hub.broadcast({
-            "type": "SECURITY_INCIDENT_ALERT",
-            "alert": assessment
-        })
-        console.print(f"[bold red]🚨 Alert Broadcasted: User={user} Risk={assessment['risk_score']} Status={assessment['status']} Action={assessment['policy_action']}[/bold red]")
-
     return {
-        "status": "PROCESSED",
-        "user": user,
-        "assessment": assessment
+        "status": "QUEUED_IN_WINDOW",
+        "user": event.user,
+        "window_events_count": log_buffer.get_user_event_count(event.user)
     }
 
 
@@ -211,31 +209,16 @@ def get_recent_alerts():
     }
 
 
-@app.get("/api/v1/users/{user}/profile")
-def get_user_profile(user: str):
-    """Returns current behavioral counters and state for a specific identity."""
-    today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    state = log_buffer.user_day_state.get((user, today_key), {})
-    assessment = predictor.evaluate_features(user, today_key, dict(state), include_autoencoder=True) if state else None
-    return {
-        "user": user,
-        "date": today_key,
-        "is_blocked": user in blocked_users_and_ips,
-        "current_features": state,
-        "latest_risk_assessment": assessment
-    }
-
-
 @app.get("/api/v1/users/{user}/window")
 def get_user_window(user: str):
-    """Returns active 5-minute time window state for a specific identity."""
-    today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    window_summary = log_buffer.get_window_summary(user)
-    features = log_buffer.compute_window_features(user, today_key)
-    assessment = predictor.evaluate_features(user, today_key, features, include_autoencoder=True)
+    """Returns active 5-minute time window state & manual evaluation on-demand."""
+    date_key, features, event_count = log_buffer.aggregate_window(user)
+    assessment = predictor.evaluate_features(user, date_key, features, include_autoencoder=True)
     return {
-        "summary": window_summary,
-        "window_features": features,
+        "user": user,
+        "event_count": event_count,
+        "date_key": date_key,
+        "features": features,
         "assessment": assessment
     }
 
@@ -271,15 +254,27 @@ async def enforce_policy(req: PolicyEnforceRequest):
     }
 
 
+# WebSocket endpoints
+@app.websocket("/ws")
 @app.websocket("/ws/alerts")
+@app.websocket("/api/v1/ws/alerts")
 async def websocket_alerts_feed(websocket: WebSocket):
     """
-    Live WebSocket endpoint streaming real-time security alerts and risk scoring events.
+    Live WebSocket endpoint streaming real-time security alerts to Postman and SOC dashboards.
+    Alerts are pushed automatically when a 5-minute window evaluation exceeds the risk threshold (>= 65).
     """
     await ws_hub.connect(websocket)
     try:
+        # Send an immediate connection welcome message so Postman confirms the channel is live
+        await websocket.send_json({
+            "type": "CONNECTION_ESTABLISHED",
+            "message": "Connected to Internal Firewall Security Incident Stream",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "window_seconds": redis_worker.window_seconds,
+            "alert_threshold": redis_worker.alert_threshold
+        })
         while True:
-            # Client keep-alive / ping
-            await websocket.receive_text()
+            # Keep-alive loop
+            data = await websocket.receive_text()
     except WebSocketDisconnect:
         ws_hub.disconnect(websocket)

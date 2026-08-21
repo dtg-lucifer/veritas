@@ -1,265 +1,289 @@
 """
-5-Minute Stateful Behavioral Window Aggregator & Rolling Log Buffer.
-Decoupled stream ingestion buffers raw heterogeneous events into 5-minute
-tumbling / sliding time windows per identity (user / src_ip) and compiles
-normalized 30-dimension behavioral feature vectors for ensemble ML inference.
+5-Minute Stateful Behavioral Window Aggregator.
+
+Buffers raw network events into per-user sliding windows and computes
+30-dimension behavioral feature vectors ON DEMAND (every 5-minute cycle).
+
+Key design principle:
+  - ingest() is SILENT — no prediction, no logging, just accumulation.
+  - aggregate_window() is called by the timer thread every 5 minutes.
+  - Surge Z-scores are calibrated to CERT r4.2 normal daily baselines:
+      * Normal browsing (connection events only) → all z-scores = 0
+      * USB + file exfil + suspicious URLs → elevated z-scores → high risk
 """
 
 from typing import Dict, Any, Tuple, List, Optional
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict, deque
-import math
+import threading
 
 
 class TimeWindowLogAggregator:
     """
     Stateful 5-Minute Window Behavioral Feature Aggregator.
-    Maintains rolling queues of raw events within [t - 300s, t] per entity
-    and calculates statistical baseline deviations and volumetric counters.
+
+    Ingests raw events into per-user sliding windows and computes
+    30-dimension feature vectors on demand (every 5-minute timer cycle).
     """
+
     def __init__(self, window_seconds: int = 300):
         self.window_seconds = window_seconds
-        # user -> deque of (timestamp_datetime, raw_event_dict)
-        self.user_event_windows: Dict[str, deque] = defaultdict(deque)
-        # (user, YYYY-MM-DD) -> cumulative daily state dictionary
-        self.user_day_state: Dict[Tuple[str, str], Dict[str, float]] = defaultdict(lambda: defaultdict(float))
-        # Running baseline historical stats per user: user -> {metric: (mean, std)}
-        self.historical_user_stats: Dict[str, Dict[str, Tuple[float, float]]] = defaultdict(dict)
+        # user → deque of (datetime, event_dict)
+        self._user_events: Dict[str, deque] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    # ─── Timestamp Helpers ────────────────────────────────────────
 
     @staticmethod
-    def parse_timestamp(ts: Any) -> datetime:
-        """Parses ISO timestamp string or returns current UTC datetime."""
+    def _parse_ts(ts: Any) -> datetime:
         if isinstance(ts, datetime):
             return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
         if isinstance(ts, str) and ts.strip():
             try:
-                clean_ts = ts.replace("Z", "+00:00")
-                dt = datetime.fromisoformat(clean_ts)
-                return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
             except Exception:
                 pass
         return datetime.now(timezone.utc)
 
     @staticmethod
-    def is_after_hours(dt: datetime) -> bool:
-        """Outside 07:30 - 18:30 or weekend."""
-        hour = dt.hour + dt.minute / 60.0
-        return (dt.weekday() >= 5) or (hour < 7.5) or (hour > 18.5)
+    def _is_after_hours(dt: datetime) -> bool:
+        """Outside 07:30–18:30 or weekend."""
+        h = dt.hour + dt.minute / 60.0
+        return dt.weekday() >= 5 or h < 7.5 or h > 18.5
 
-    def ingest_event(self, event: Dict[str, Any]) -> Tuple[str, str, Dict[str, float]]:
+    # ─── Ingest (Silent) ──────────────────────────────────────────
+
+    def ingest(self, event: Dict[str, Any]):
         """
-        Ingests a single raw event into the 5-minute sliding window and cumulative daily buffer.
-        Returns (user, date_key, 30_dim_feature_vector).
+        Silently buffers a raw event into the user's sliding window.
+        NO prediction, NO console output — just accumulation.
         """
         user = str(event.get("user", "UNKNOWN")).strip()
-        dt = self.parse_timestamp(event.get("timestamp"))
-        date_key = dt.strftime("%Y-%m-%d")
+        dt = self._parse_ts(event.get("timestamp"))
+        with self._lock:
+            self._user_events[user].append((dt, event))
 
-        # 1. Append to user's 5-minute rolling window
-        user_window = self.user_event_windows[user]
-        user_window.append((dt, event))
+    # ─── Window Queries ───────────────────────────────────────────
 
-        # Evict events older than window_seconds relative to this event timestamp
-        cutoff = dt - timedelta(seconds=self.window_seconds)
-        while user_window and user_window[0][0] < cutoff:
-            user_window.popleft()
-
-        # 2. Update cumulative daily counters
-        after_h = self.is_after_hours(dt)
-        day_state = self.user_day_state[(user, date_key)]
-        day_state["is_weekend"] = 1.0 if dt.weekday() >= 5 else 0.0
-
-        evt_type = str(event.get("event_type", "")).lower()
-
-        # Device / USB
-        if evt_type == "device":
-            act = str(event.get("activity", "")).lower()
-            if "connect" in act and "disconnect" not in act:
-                day_state["device_connect_count"] += 1
-                if after_h:
-                    day_state["device_after_hours"] += 1
-            elif "disconnect" in act:
-                day_state["device_disconnect_count"] += 1
-
-        # File copy
-        elif evt_type == "file_copy":
-            day_state["file_copy_count"] += 1
-            filename = str(event.get("filename", "")).lower()
-            ext = str(event.get("file_extension", "")).lower()
-            
-            is_sensitive_doc = (
-                ext in [".doc", ".docx", ".pdf", ".txt", ".xls", ".xlsx", ".csv", ".ppt"]
-                or filename.endswith((".doc", ".docx", ".pdf", ".txt", ".xls", ".xlsx", ".csv", ".ppt"))
-            )
-            is_exec_archive = (
-                ext in [".exe", ".zip", ".rar", ".7z", ".bin", ".py", ".tar", ".gz"]
-                or filename.endswith((".exe", ".zip", ".bin", ".tar", ".gz"))
-            )
-
-            if is_sensitive_doc:
-                day_state["file_doc_pdf_count"] += 1
-            elif is_exec_archive:
-                day_state["file_zip_exe_count"] += 1
-
-            if after_h:
-                day_state["file_after_hours"] += 1
-
-        # Email
-        elif evt_type == "email":
-            size = float(event.get("size", event.get("bytes", 15000)))
-            to_addr = str(event.get("to", "")).lower()
-            bcc_addr = str(event.get("bcc", "")).lower()
-
-            day_state["email_sent_count"] += 1
-            day_state["email_total_bytes"] += size
-            day_state["email_max_bytes"] = max(day_state["email_max_bytes"], size)
-
-            is_external = ("@dtaa.com" not in to_addr) and ("@" in to_addr)
-            if is_external:
-                day_state["email_external_count"] += 1
-            if bcc_addr and bcc_addr not in ["", "nan", "none"]:
-                day_state["email_bcc_count"] += 1
-            if after_h:
-                day_state["email_after_hours"] += 1
-
-        # HTTP / Web
-        elif evt_type == "http":
-            day_state["http_request_count"] += 1
-            url = str(event.get("url", event.get("domain", ""))).lower()
-
-            if "wikileaks" in url:
-                day_state["http_wikileaks_count"] += 1
-            elif any(k in url for k in ["monster.com", "careerbuilder.com", "indeed.com", "dice.com", "simplyhired.com", "jobhunt", "linkedin", "raytheon", "lockheedmartin", "boeing"]):
-                day_state["http_job_search_count"] += 1
-            elif any(k in url for k in ["dropbox.com", "drive.google.com", "box.com", "mediafire.com", "mega.nz", "rapidshare.com"]):
-                day_state["http_cloud_storage_count"] += 1
-            elif any(k in url for k in ["keylogger", "exploit-db", "spectorsoft", "dailykeylogger", "rootkit", "payload.bin"]):
-                day_state["http_hacking_count"] += 1
-
-            if after_h:
-                day_state["http_after_hours"] += 1
-
-        # 3. Compute derived features over the 5-minute active window & cumulative state
-        features = self.compute_window_features(user, date_key, dt)
-        return user, date_key, features
-
-    def compute_window_features(self, user: str, date_key: str, ref_dt: Optional[datetime] = None) -> Dict[str, float]:
-        """
-        Synthesizes the 30-dimension behavioral feature vector representing
-        activity in the current 5-minute window with rolling surge Z-scores.
-        """
-        ref_dt = ref_dt or datetime.now(timezone.utc)
-        user_window = self.user_event_windows[user]
-        day_state = self.user_day_state[(user, date_key)]
-
-        # Extract 5-minute window counts
-        w_events = [evt for ts, evt in user_window if ts >= (ref_dt - timedelta(seconds=self.window_seconds))]
-        
-        # Build 30-feature vector
-        features: Dict[str, float] = {}
-
-        # 1. Device metrics
-        features["device_connect_count"] = day_state["device_connect_count"]
-        features["device_disconnect_count"] = day_state["device_disconnect_count"]
-        features["device_after_hours"] = day_state["device_after_hours"]
-
-        # 2. File copy metrics
-        features["file_copy_count"] = day_state["file_copy_count"]
-        features["file_doc_pdf_count"] = day_state["file_doc_pdf_count"]
-        features["file_zip_exe_count"] = day_state["file_zip_exe_count"]
-        features["file_after_hours"] = day_state["file_after_hours"]
-
-        # 3. Email metrics
-        email_sent = day_state["email_sent_count"]
-        email_bytes = day_state["email_total_bytes"]
-        features["email_sent_count"] = email_sent
-        features["email_total_bytes"] = email_bytes
-        features["email_avg_bytes"] = (email_bytes / email_sent) if email_sent > 0 else 0.0
-        features["email_max_bytes"] = day_state["email_max_bytes"]
-        features["email_external_count"] = day_state["email_external_count"]
-        features["email_bcc_count"] = day_state["email_bcc_count"]
-        features["email_after_hours"] = day_state["email_after_hours"]
-        features["external_email_ratio"] = (day_state["email_external_count"] / email_sent) if email_sent > 0 else 0.0
-
-        # 4. HTTP / Web metrics
-        http_cnt = day_state["http_request_count"]
-        features["http_request_count"] = http_cnt
-        features["http_wikileaks_count"] = day_state["http_wikileaks_count"]
-        features["http_job_search_count"] = day_state["http_job_search_count"]
-        features["http_cloud_storage_count"] = day_state["http_cloud_storage_count"]
-        features["http_hacking_count"] = day_state["http_hacking_count"]
-        features["http_after_hours"] = day_state["http_after_hours"]
-
-        # 5. Temporal and Aggregates
-        features["is_weekend"] = day_state["is_weekend"]
-        tot_activity = (
-            features["device_connect_count"] + features["device_disconnect_count"] +
-            features["file_copy_count"] + features["email_sent_count"] + features["http_request_count"]
-        )
-        features["total_activity_count"] = tot_activity
-        tot_after = (
-            features["device_after_hours"] + features["file_after_hours"] +
-            features["email_after_hours"] + features["http_after_hours"]
-        )
-        features["total_after_hours_count"] = tot_after
-        features["after_hours_ratio"] = (tot_after / tot_activity) if tot_activity > 0 else 0.0
-
-        # Sensitive web
-        sens_web = (
-            features["http_wikileaks_count"] + features["http_job_search_count"] +
-            features["http_cloud_storage_count"] + features["http_hacking_count"]
-        )
-        features["sensitive_web_count"] = sens_web
-        features["sensitive_web_ratio"] = min(1.0, (sens_web / http_cnt) if http_cnt > 0 else 0.0)
-
-        # 6. Window-calibrated Surge Z-Scores
-        # Detect surges during the 5-minute active window
-        w_device_connect = sum(1 for e in w_events if e.get("event_type") == "device" and "connect" in str(e.get("activity", "")).lower() and "disconnect" not in str(e.get("activity", "")).lower())
-        w_file_copies = sum(1 for e in w_events if e.get("event_type") == "file_copy")
-        w_email_bytes = sum(float(e.get("size", e.get("bytes", 0))) for e in w_events if e.get("event_type") == "email")
-
-        # USB Surge Z-Score
-        if features["device_connect_count"] > 0:
-            if features["device_after_hours"] > 0:
-                features["usb_surge_zscore"] = max(4.5, 3.0 + 1.5 * w_device_connect)
-            else:
-                features["usb_surge_zscore"] = max(2.0, 1.0 + 1.0 * w_device_connect)
-        else:
-            features["usb_surge_zscore"] = 0.0
-
-        # File Surge Z-Score
-        if features["file_copy_count"] > 0:
-            if features["file_after_hours"] > 0:
-                features["file_surge_zscore"] = max(6.0, 3.0 + 2.0 * w_file_copies)
-            else:
-                features["file_surge_zscore"] = max(2.0, 1.0 + 1.0 * w_file_copies)
-        else:
-            features["file_surge_zscore"] = 0.0
-
-        # Email Bytes Surge Z-Score
-        if email_bytes > 5_000_000:
-            features["email_bytes_surge_zscore"] = max(8.0, 4.0 + (email_bytes / 10_000_000.0))
-        elif email_sent > 0:
-            features["email_bytes_surge_zscore"] = max(0.0, (email_bytes / 500_000.0))
-        else:
-            features["email_bytes_surge_zscore"] = 0.0
-
-        return features
-
-    def get_window_summary(self, user: str) -> Dict[str, Any]:
-        """Returns statistics for active 5-minute window of a user."""
+    def get_active_users(self) -> List[str]:
+        """Returns users who have events in the current window."""
         now = datetime.now(timezone.utc)
         cutoff = now - timedelta(seconds=self.window_seconds)
-        events = [evt for ts, evt in self.user_event_windows[user] if ts >= cutoff]
-        return {
-            "user": user,
-            "window_duration_seconds": self.window_seconds,
-            "active_events_count": len(events),
-            "event_types": list(set(e.get("event_type", "unknown") for e in events)),
-            "window_start": cutoff.isoformat(),
-            "window_end": now.isoformat()
+        active = []
+        with self._lock:
+            for user, q in list(self._user_events.items()):
+                # Evict stale events
+                while q and q[0][0] < cutoff:
+                    q.popleft()
+                if q:
+                    active.append(user)
+                else:
+                    self._user_events.pop(user, None)
+        return active
+
+    def get_user_event_count(self, user: str) -> int:
+        with self._lock:
+            return len(self._user_events.get(user, deque()))
+
+    # ─── 5-Minute Aggregation ─────────────────────────────────────
+
+    def aggregate_window(self, user: str) -> Tuple[str, Dict[str, float], int]:
+        """
+        Aggregates ALL events in the user's current window into the
+        30-dimension feature vector that the ML models expect, and drains them.
+
+        Returns: (date_key, features_dict, event_count)
+        """
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=self.window_seconds)
+        date_key = now.strftime("%Y-%m-%d")
+
+        # Snapshot and drain current window events under lock
+        with self._lock:
+            q = self._user_events.get(user, deque())
+            while q and q[0][0] < cutoff:
+                q.popleft()
+            window = []
+            while q:
+                window.append(q.popleft())
+            # Clean up empty user entry
+            self._user_events.pop(user, None)
+
+        event_count = len(window)
+
+        # ── Raw counters ──────────────────────────────────────────
+        device_connect = 0
+        device_disconnect = 0
+        device_after_hours = 0
+        file_copy = 0
+        file_doc_pdf = 0
+        file_zip_exe = 0
+        file_after_hours = 0
+        email_sent = 0
+        email_total_bytes = 0.0
+        email_max_bytes = 0.0
+        email_external = 0
+        email_bcc = 0
+        email_after_hours = 0
+        http_requests = 0
+        http_wikileaks = 0
+        http_job_search = 0
+        http_cloud_storage = 0
+        http_hacking = 0
+        http_after_hours = 0
+        is_weekend = 0
+
+        for ts, evt in window:
+            # Check explicit event flag if provided, otherwise compute from timestamp
+            after_h = bool(evt.get("is_after_hours")) if "is_after_hours" in evt else self._is_after_hours(ts)
+            if ts.weekday() >= 5 or bool(evt.get("is_weekend")):
+                is_weekend = 1
+
+            evt_type = str(evt.get("event_type", "")).lower()
+
+            # ── USB / Removable Device ────────────────────────────
+            if evt_type == "device":
+                act = str(evt.get("activity", "")).lower()
+                if "connect" in act and "disconnect" not in act:
+                    device_connect += 1
+                    if after_h:
+                        device_after_hours += 1
+                elif "disconnect" in act:
+                    device_disconnect += 1
+
+            # ── File Copy ─────────────────────────────────────────
+            elif evt_type == "file_copy":
+                file_copy += 1
+                ext = str(evt.get("file_extension", "")).lower()
+                fname = str(evt.get("filename", "")).lower()
+                doc_exts = (".doc", ".docx", ".pdf", ".txt", ".xls", ".xlsx", ".csv", ".ppt")
+                exe_exts = (".exe", ".zip", ".rar", ".7z", ".bin", ".py", ".tar", ".gz")
+                if ext in doc_exts or any(fname.endswith(e) for e in doc_exts):
+                    file_doc_pdf += 1
+                elif ext in exe_exts or any(fname.endswith(e) for e in exe_exts):
+                    file_zip_exe += 1
+                if after_h:
+                    file_after_hours += 1
+
+            # ── Email ─────────────────────────────────────────────
+            elif evt_type == "email":
+                email_sent += 1
+                sz = float(evt.get("size", evt.get("bytes", 15000)))
+                email_total_bytes += sz
+                email_max_bytes = max(email_max_bytes, sz)
+                to_addr = str(evt.get("to", "")).lower()
+                if "@" in to_addr and "@dtaa.com" not in to_addr:
+                    email_external += 1
+                bcc_val = str(evt.get("bcc", "")).lower()
+                if bcc_val and bcc_val not in ("", "nan", "none"):
+                    email_bcc += 1
+                if after_h:
+                    email_after_hours += 1
+
+            # ── HTTP / Connection ─────────────────────────────────
+            elif evt_type == "http" or (evt_type in ("connection", "conn") and evt.get("url")):
+                http_requests += 1
+                url = str(evt.get("url", evt.get("domain", ""))).lower()
+                if "wikileaks" in url:
+                    http_wikileaks += 1
+                elif any(k in url for k in (
+                    "monster.com", "careerbuilder", "indeed.com", "dice.com",
+                    "simplyhired", "jobhunt", "linkedin", "raytheon",
+                    "lockheedmartin", "boeing",
+                )):
+                    http_job_search += 1
+                elif any(k in url for k in (
+                    "dropbox.com", "drive.google.com", "box.com",
+                    "mediafire.com", "mega.nz", "rapidshare.com",
+                )):
+                    http_cloud_storage += 1
+                elif any(k in url for k in (
+                    "keylogger", "exploit-db", "spectorsoft",
+                    "dailykeylogger", "rootkit", "payload.bin",
+                )):
+                    http_hacking += 1
+                if after_h:
+                    http_after_hours += 1
+            elif evt_type in ("connection", "conn"):
+                # Background transport packet without HTTP URL
+                if after_h:
+                    http_after_hours += 1
+
+        # ── Derived metrics ───────────────────────────────────────
+        email_avg = (email_total_bytes / email_sent) if email_sent > 0 else 0.0
+        total_activity = device_connect + device_disconnect + file_copy + email_sent + http_requests
+        total_after = device_after_hours + file_after_hours + email_after_hours + http_after_hours
+        after_ratio = (total_after / total_activity) if total_activity > 0 else 0.0
+        sens_web = http_wikileaks + http_job_search + http_cloud_storage + http_hacking
+        sens_ratio = min(1.0, (sens_web / http_requests) if http_requests > 0 else 0.0)
+        ext_email_ratio = (email_external / email_sent) if email_sent > 0 else 0.0
+
+        # ── Surge Z-Scores (calibrated to CERT r4.2 normal baselines) ──
+        #
+        # Training data normal baselines (per-day):
+        #   device_connect: mean ≈ 0.3, std ≈ 0.8  → most days = 0
+        #   file_copy:      mean ≈ 0.5, std ≈ 1.2  → most days = 0
+        #   email_bytes:    mean ≈ 200KB, std ≈ 300KB
+        #
+        # For a 5-minute window, normal values are even LOWER.
+        # Z-score = (value - mean) / std
+        # Only produce high z-scores for genuinely anomalous volumes.
+
+        usb_zscore = 0.0
+        if device_connect > 0:
+            # 1 connect in 5 min is mildly notable (z≈1), 3+ is suspicious (z≈3+)
+            usb_zscore = (device_connect - 0.3) / 0.8
+            if device_after_hours > 0:
+                usb_zscore += 3.0  # After-hours USB is a strong signal
+
+        file_zscore = 0.0
+        if file_copy > 0:
+            file_zscore = (file_copy - 0.5) / 1.2
+            if file_after_hours > 0:
+                file_zscore += 2.0
+            if file_zip_exe > 0:
+                file_zscore += 1.5  # Archive/exe copies are suspicious
+
+        email_zscore = 0.0
+        if email_sent > 0:
+            mb = email_total_bytes / 1_000_000.0
+            # Normal ≈ 0.2 MB/day, std ≈ 0.3 MB
+            email_zscore = max(0.0, (mb - 0.2) / 0.3)
+            if email_zscore > 15.0:
+                email_zscore = 15.0
+
+        # ── Build the 30-dimension feature vector ─────────────────
+        features = {
+            "device_connect_count": float(device_connect),
+            "device_disconnect_count": float(device_disconnect),
+            "device_after_hours": float(device_after_hours),
+            "file_copy_count": float(file_copy),
+            "file_doc_pdf_count": float(file_doc_pdf),
+            "file_zip_exe_count": float(file_zip_exe),
+            "file_after_hours": float(file_after_hours),
+            "email_sent_count": float(email_sent),
+            "email_total_bytes": email_total_bytes,
+            "email_avg_bytes": email_avg,
+            "email_max_bytes": email_max_bytes,
+            "email_external_count": float(email_external),
+            "email_bcc_count": float(email_bcc),
+            "email_after_hours": float(email_after_hours),
+            "http_request_count": float(http_requests),
+            "http_wikileaks_count": float(http_wikileaks),
+            "http_job_search_count": float(http_job_search),
+            "http_cloud_storage_count": float(http_cloud_storage),
+            "http_hacking_count": float(http_hacking),
+            "http_after_hours": float(http_after_hours),
+            "is_weekend": float(is_weekend),
+            "total_activity_count": float(total_activity),
+            "total_after_hours_count": float(total_after),
+            "after_hours_ratio": after_ratio,
+            "sensitive_web_count": float(sens_web),
+            "sensitive_web_ratio": sens_ratio,
+            "external_email_ratio": ext_email_ratio,
+            "usb_surge_zscore": usb_zscore,
+            "file_surge_zscore": file_zscore,
+            "email_bytes_surge_zscore": email_zscore,
         }
 
-
-# Alias for backward compatibility
-RealTimeLogBuffer = TimeWindowLogAggregator
+        return date_key, features, event_count
