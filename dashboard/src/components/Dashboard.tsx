@@ -61,7 +61,7 @@ export function Dashboard() {
           };
         });
         setAlerts(formattedAlerts);
-        
+
         // Update stats
         let n = 0, s = 0, c = 0;
         formattedAlerts.forEach((a: Alert) => {
@@ -82,7 +82,7 @@ export function Dashboard() {
   useEffect(() => {
     fetchHealth();
     fetchRecentAlerts();
-    
+
     // Poll health every 5 seconds
     const interval = setInterval(fetchHealth, 5000);
     return () => clearInterval(interval);
@@ -91,17 +91,17 @@ export function Dashboard() {
   useEffect(() => {
     // Connect to WebSocket
     const ws = new WebSocket("ws://localhost:8000/api/v1/ws/alerts");
-    
+
     ws.onopen = () => {
       console.log("WebSocket connected");
       setWsConnected(true);
     };
-    
+
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "CONNECTION_ESTABLISHED") return;
-        
+
         // Handle new alert
         if (data.type === "SECURITY_INCIDENT_ALERT" && data.alert) {
           const alertData = data.alert;
@@ -115,17 +115,17 @@ export function Dashboard() {
             message: alertData.message || `Policy action: ${alertData.policy_action || "UNKNOWN"}`,
             top_deviations: alertData.top_deviations
           };
-          
+
           setAlerts(prev => [newAlert, ...prev].slice(0, 50)); // Keep last 50
-          
+
           setRiskStats(prev => ({
             ...prev,
             [newAlert.classification.toLowerCase()]: prev[newAlert.classification.toLowerCase() as keyof typeof prev] + 1
           }));
 
           // Trigger toast notification based on classification
-          const description = newAlert.top_deviations && newAlert.top_deviations.length > 0 
-            ? newAlert.top_deviations[0] 
+          const description = newAlert.top_deviations && newAlert.top_deviations.length > 0
+            ? newAlert.top_deviations[0]
             : newAlert.message;
 
           if (newAlert.classification === "SUSPICIOUS") {
@@ -144,12 +144,12 @@ export function Dashboard() {
         console.error("Failed to parse WS message", err);
       }
     };
-    
+
     ws.onclose = () => {
       console.log("WebSocket disconnected");
       setWsConnected(false);
     };
-    
+
     return () => ws.close();
   }, []);
 
@@ -168,13 +168,10 @@ export function Dashboard() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              Adaptive Internal Firewall
+              Adaptive Internal Network Threat Detection
             </h1>
-            <p className="text-muted-foreground mt-1">
-              Real-time SIH 2026 SOC Dashboard
-            </p>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-gray-200 shadow-sm">
               <div className={`h-2 w-2 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
@@ -191,7 +188,7 @@ export function Dashboard() {
 
         {/* Top Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          
+
           <Card className="bg-white border-gray-100 shadow-sm rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-slate-500">Events Ingested</CardTitle>
@@ -204,7 +201,7 @@ export function Dashboard() {
               <p className="text-xs text-slate-500 mt-1">Raw telemetry logs processed</p>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-white border-gray-100 shadow-sm rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-slate-500">Windows Evaluated</CardTitle>
@@ -217,7 +214,7 @@ export function Dashboard() {
               <p className="text-xs text-slate-500 mt-1">5-minute behavioral periods</p>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-white border-gray-100 shadow-sm rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-slate-500">Total Alerts</CardTitle>
@@ -239,7 +236,7 @@ export function Dashboard() {
             <div className="flex-1 min-h-0">
               <RiskDistributionChart data={chartData} />
             </div>
-            
+
             {/* Action Panel */}
             <Card className="bg-white border-red-100 shadow-sm rounded-xl">
               <CardHeader>
@@ -265,7 +262,7 @@ export function Dashboard() {
           {/* Right Column: Alert Feed */}
           <div className="lg:col-span-2 h-full">
             <Card className="h-full bg-white border-gray-100 shadow-sm rounded-xl flex flex-col">
-              <CardContent className="flex-1 p-6 min-h-0">
+              <CardContent className="flex-1 flex flex-col p-6 min-h-0">
                 <LiveAlertFeed alerts={alerts} />
               </CardContent>
             </Card>

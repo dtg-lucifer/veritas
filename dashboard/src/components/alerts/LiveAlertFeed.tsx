@@ -146,7 +146,7 @@ function AlertCard({ alert }: { alert: Alert }) {
 
 export function LiveAlertFeed({ alerts }: LiveAlertFeedProps) {
   return (
-    <div className="flex h-full flex-col space-y-4">
+    <div className="flex flex-1 h-full min-h-0 flex-col space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium text-slate-900 flex items-center gap-2">
           <Activity className="h-5 w-5 text-blue-500" />
