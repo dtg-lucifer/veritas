@@ -1,4 +1,4 @@
-from app.predictor import SecurityModelPredictor
+from src.predictor import SecurityModelPredictor
 import asyncio
 
 predictor = SecurityModelPredictor()

@@ -16,13 +16,13 @@ from rich.panel import Panel
 
 # Add backend, simulator, and ml to sys.path
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT_DIR / "backend"))
-sys.path.insert(0, str(ROOT_DIR / "simulator"))
 sys.path.insert(0, str(ROOT_DIR / "ml"))
+sys.path.insert(0, str(ROOT_DIR / "simulator"))
+sys.path.insert(0, str(ROOT_DIR / "backend"))
 
-from app.predictor import SecurityModelPredictor
-from app.log_buffer import TimeWindowLogAggregator
-from app.redis_worker import MultithreadedRedisLogWorker
+from src.predictor import SecurityModelPredictor
+from src.log_buffer import TimeWindowLogAggregator
+from src.redis_worker import MultithreadedRedisLogWorker
 from scenarios import generate_normal_stream, generate_suspicious_stream
 
 console = Console()

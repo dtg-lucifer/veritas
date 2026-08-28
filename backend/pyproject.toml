@@ -22,10 +22,3 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "websockets>=13.0",
 ]
-
-[project.scripts]
-backend = "backend:main"
-
-[build-system]
-requires = ["uv_build>=0.12.5,<0.13.0"]
-build-backend = "uv_build"

@@ -261,12 +261,6 @@ class MultithreadedRedisLogWorker:
                     if len(self.alerts_list) > 100:
                         self.alerts_list.pop()
 
-                alert_payload = {
-                    "type": "SECURITY_INCIDENT_ALERT",
-                    "alert": assessment,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-
                 # Thread-safe dispatch to FastAPI event loop
                 if self.broadcast_callback and self.event_loop:
                     try:

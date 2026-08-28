@@ -44,7 +44,7 @@ To handle thousands of incoming network events per second without latency spikes
 ### 1. Run the Backend Server
 ```bash
 cd backend
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 Interactive Swagger API documentation: **`http://localhost:8000/docs`**
 
@@ -52,13 +52,13 @@ Interactive Swagger API documentation: **`http://localhost:8000/docs`**
 In a separate terminal:
 ```bash
 cd backend
-uv run python -m app.redis_producer
+uv run python -m src.redis_producer
 ```
 
 ### 3. Run Automated Integration Tests
 ```bash
 cd backend
-uv run python -m app.test_client
+uv run python -m src.test_client
 ```
 
 ---

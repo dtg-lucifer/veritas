@@ -20,7 +20,7 @@ WORKDIR /app/backend
 RUN uv sync --frozen --no-install-project || uv sync --no-install-project
 
 # Copy ONLY backend application source code
-COPY backend/app /app/backend/app
+COPY backend/src /app/backend/src
 
 # Copy ONLY ML models and inference source (EXCLUDING 14GB+ ml/data)
 COPY ml/src /app/ml/src
@@ -34,4 +34,4 @@ ENV REDIS_URL=redis://redis:6379/0
 ENV REDIS_QUEUE_KEY=network_logs_queue
 
 # Start FastAPI server
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
