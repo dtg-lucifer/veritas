@@ -22,4 +22,4 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: ["uv", "run", "python", "-m", "app.test_client"]
+    command: ["uv", "run", "python", "-m", "src.test_client"]
