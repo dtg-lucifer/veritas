@@ -1,4 +1,3 @@
-"""Evaluation alias"""
-from src.evalutation.evaluator import ModelEvaluator
+from src.evaluation.benchmark import ModelBenchmark
 
-__all__ = ["ModelEvaluator"]
+__all__ = ["ModelBenchmark"]

@@ -1,38 +1,84 @@
-# 🛡️ Pyshark Network Packet Logger & Redis MQ Producer
+# 🛡️ Network Telemetry Logger & Kafka Message Producer
 
-High-speed network packet sniffer powered by **PyShark** (Wireshark/TShark) and **Redis Message Broker**.
-Captures live network packets on any interface or replays static PCAP files, normalizes layer metadata (HTTP, TLS/SNI, DNS, Email, File Transfers) into the exact 30-dimension feature format expected by the AI/ML backend, and streams them into Redis MQ (`network_logs_queue`).
-
----
-
-## 🚀 Key Features
-
-1. **Protocol Deep Inspection**:
-   - **HTTP**: Extracts request methods, Host, URI, URL, User-Agent, headers (`X-User-Id`), content lengths, and response sizes.
-   - **TLS / HTTPS**: Extracts Server Name Indication (SNI) from TLS Handshakes to identify encrypted destination domains (e.g. `wikileaks.org`, `dropbox.com`).
-   - **DNS**: Captures query names (`dns.qry_name`).
-   - **Email Protocols**: Detects SMTP / IMAP / POP3 traffic, message sizes, recipients (`to`, `bcc`).
-   - **File Transfers**: Identifies sensitive document and archive downloads/uploads (`.pdf`, `.docx`, `.zip`, `.exe`, `.tar`, `.bin`).
-2. **Temporal & Identity Mapping**:
-   - Automatic classification of after-hours traffic (outside 07:30 - 18:30 or weekends).
-   - Identity resolution via headers (`X-User-Id`) or IP-to-User lookup mapping table.
-3. **Decoupled Line-Speed Producer**:
-   - Fast synchronous/pipelined Redis `LPUSH` into `network_logs_queue`.
+High-speed network telemetry replayer and packet sniffer powered by **Apache Kafka**, **Pandas**, and **PyShark**.
+Streams standardized flow records into Kafka topic `network_flows` for continuous 15-second state aggregation and AI World Model forward simulation.
 
 ---
 
-## 📦 Usage
+## 🚀 Key Capabilities
 
-### 1. Live Interface Sniffing
+1. **Day-Based Telemetry Replayer (`--day`)**:
+   - Stream actual traffic from any designated day of the CSE-CIC-IDS2018 benchmark:
+     - `monday`: Nominal baseline traffic (pure benign flows)
+     - `thursday`: Infiltration, network reconnaissance & lateral movement
+     - `wednesday`: FTP & SSH Brute Force attacks
+     - `friday`: Botnet C2 telemetry
+     - `tuesday`: DDoS flood attacks
+   - Configurable streaming rate (`--rate`, flows/sec) and maximum flow count (`--max-flows`).
+   - Scenario filtering: `--scenario=attack` or `--scenario=benign` to test specific security states.
+
+2. **Live Interface Sniffing (`sniff`)**:
+   - Captures live network packets on any interface (`lo`, `eth0`, etc.) using PyShark and streams them into Kafka.
+
+3. **PCAP Capture File Replay (`pcap`)**:
+   - Parses offline `.pcap` files and streams normalized flow records into Kafka.
+
+---
+
+## 📦 Usage Examples
+
+### 1. Attack & Day Telemetry Replay (Recommended for Testing & Benchmarks)
 ```bash
+cd logger
+
+# 1. Replay Command & Control (Botnet C2) -> Stage: Command & Control
+uv run logger --attack=botnet --scenario=attack --max-flows=200 --rate=100
+
+# 2. Replay Initial Access (FTP / SSH Brute Force) -> Stage: Initial Access
+uv run logger --attack=bruteforce --scenario=attack --max-flows=200 --rate=100
+
+# 3. Replay Denial of Service (SlowHTTPTest / Hulk) -> Stage: Initial Access / DoS
+uv run logger --attack=dos --scenario=attack --max-flows=200 --rate=100
+
+# 4. Replay Distributed Denial of Service (LOIC Flood) -> Stage: Exfiltration / Impact
+uv run logger --attack=ddos --scenario=attack --max-flows=200 --rate=100
+
+# 5. Replay Infiltration & Lateral Movement -> Stage: Infiltration / Lateral Movement
+uv run logger --attack=infiltration --scenario=attack --max-flows=200 --rate=100
+
+# 6. Replay GoldenEye / Slowloris -> Stage: Command & Control / Impact
+uv run logger --attack=goldeneye --scenario=attack --max-flows=200 --rate=100
+
+# 7. Replay Clean Benign Baseline -> Stage: Benign (Risk < 1%)
+uv run logger --attack=benign --max-flows=200 --rate=100
+```
+
+
+### 2. Live Interface Sniffing
+```bash
+cd logger
 # Capture packets on loopback interface
-uv run --directory logger python main.py sniff --interface lo
+sudo uv run logger sniff --interface lo
 
-# Capture packets with BPF filter on specific interface
-uv run --directory logger python main.py sniff --interface eth0 --bpf "tcp port 80 or port 443" --user AAM0658
+# Capture packets on eth0 with BPF filter
+sudo uv run logger sniff --interface eth0 --bpf "tcp port 80 or port 443"
 ```
 
-### 2. PCAP File Replay
+### 3. PCAP File Replay
 ```bash
-uv run --directory logger python main.py pcap sample_traffic.pcap --redis-url redis://localhost:6379/0
+cd logger
+uv run logger pcap sample_traffic.pcap --topic network_flows
 ```
+
+---
+
+## ⚙️ CLI Options
+
+| Flag | Shorthand | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--day` | `-d` | `None` | Day to replay (`monday`, `tuesday`, `wednesday`, `thursday`, `friday`) |
+| `--scenario` | `-s` | `auto` | Scenario filter: `auto`, `attack`, or `benign` |
+| `--rate` | `-r` | `100.0` | Emission rate in records per second (0 for max speed) |
+| `--max-flows` | `-m` | `None` | Maximum number of records to emit |
+| `--kafka-server` | | `localhost:9092` | Address of Kafka bootstrap broker |
+| `--topic` | `-t` | `network_flows` | Target Kafka topic |

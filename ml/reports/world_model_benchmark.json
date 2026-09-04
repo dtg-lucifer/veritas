@@ -1,0 +1,33 @@
+{
+  "title": "Internal Firewall AI World Model Benchmark vs Static Baseline",
+  "summary": {
+    "dynamics_mse_loss": 20.7922,
+    "forward_simulation_lead_time_steps": 4,
+    "f1_improvement_percent": 16.26,
+    "fpr_reduction_percent": 31.73
+  },
+  "world_model": {
+    "accuracy": 0.6949,
+    "precision": 0.3936,
+    "recall": 0.484,
+    "f1_score": 0.4341,
+    "false_positive_rate": 0.2378,
+    "roc_auc": 0.6761,
+    "true_positives": 257,
+    "false_positives": 396,
+    "true_negatives": 1269,
+    "false_negatives": 274
+  },
+  "static_baseline": {
+    "accuracy": 0.6102,
+    "precision": 0.3054,
+    "recall": 0.4802,
+    "f1_score": 0.3734,
+    "false_positive_rate": 0.3483,
+    "roc_auc": 0.6008,
+    "true_positives": 255,
+    "false_positives": 580,
+    "true_negatives": 1085,
+    "false_negatives": 276
+  }
+}

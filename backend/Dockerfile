@@ -30,8 +30,11 @@ COPY ml/models /app/ml/models
 EXPOSE 8000
 
 ENV PYTHONUNBUFFERED=1
-ENV REDIS_URL=redis://redis:6379/0
-ENV REDIS_QUEUE_KEY=network_logs_queue
+ENV KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+ENV KAFKA_TOPIC=network_flows
+ENV WINDOW_SECONDS=15
+ENV ALERT_THRESHOLD=40.0
+
 
 # Start FastAPI server
 CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

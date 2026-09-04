@@ -1,93 +1,73 @@
-# 🛡️ Internal Firewall - ML Behavioral Anomaly Detection Engine
+# 🔮 AI World Model for Proactive Cyber Defense & Infiltration Forecasting
 
-This package implements the behavioral machine learning engine for the **Internal Network Security Gateway** (Smart India Hackathon MVP).
-
-Instead of relying solely on perimeter defenses or external threat intelligence, this engine establishes behavioral baselines for authenticated internal identities, extracts multi-stream network & device behavioral feature vectors, and detects anomalous deviations (data exfiltration, lateral movement, unauthorized access, privilege abuse, abnormal hours/protocols/volumes) using an ensemble of statistical and unsupervised ML models.
+This package implements the **Network World Model Cyber Defense Engine** for the **Internal Network Security Gateway** (Smart India Hackathon 2026).
 
 ---
 
-## 🏗️ Architecture & Model Hierarchy
+## 🌟 Paradigm Shift: From Static Classification to World Models
 
-```
-Raw Activity Logs (USB, File, Email, HTTP, LDAP)
-                       │
-                       ▼
-         Time-Windowed Feature Extractor
-         (23 Behavioral Vector Dimensions)
-                       │
-         ┌─────────────┼─────────────┐
-         ▼             ▼             ▼
-  User Baseline   Isolation Forest  PyTorch Autoencoder
-    (Z-Scores)      (Tree Isolation) (Reconstruction Loss)
-         │             │             │
-         └─────────────┼─────────────┘
-                       ▼
-             Composite Risk Engine
-                 (0 - 100 Score)
-                       │
-         ┌─────────────┼─────────────┐
-         ▼             ▼             ▼
-       NORMAL      SUSPICIOUS     CRITICAL
-       (ALLOW)    (ALERT ADMIN) (ISOLATE DEVICE)
-```
+Traditional machine learning intrusion detection systems (IDS) treat each network packet or flow in isolation, mapping it statically to a binary benign/malicious label. This discards the fundamental **temporal and causal structure** of real-world cyber infiltration:
+- The sequence in which reconnaissance ports are probed.
+- The pattern in which stealthy SYN flags precede exploitation and lateral movement.
+- The inter-arrival timing (IAT) of scanning packets before privilege escalation begins.
 
-### Detection Models
+### The World Model Approach
+Rather than classifying static traffic snapshots, a **World Model** learns the internal causal simulation of how environment states evolve:
 
-1. **Statistical User Baseline Profiler (`src/baseline/`)**:
-   - Calculates running mean, standard deviation, and 95th percentiles per employee across all behavioral features.
-   - Computes feature-wise Z-scores: $Z_{u, f} = \frac{x_{u, f} - \mu_{u, f}}{\sigma_{u, f} + \epsilon}$.
-   - Provides instant explainability (e.g. `+420% USB Activity, 4.8σ above baseline`).
+$$P(S_{t+1} \mid S_{\le t})$$
 
-2. **Isolation Forest (`src/isolation_forest/`)**:
-   - Unsupervised tree ensemble isolating rare multi-dimensional feature combinations.
-   - RobustScaler normalization to handle extreme activity spikes.
-   - Outputs calibrated $[0, 1]$ anomaly probabilities.
-
-3. **Deep PyTorch Autoencoder (`src/autoencoders/`)**:
-   - Deep neural network ($D \to 64 \to 32 \to 16 \to 32 \to 64 \to D$) trained to reconstruct normal behavior manifold.
-   - Computes anomaly score from MSE reconstruction error: $||X - \hat{X}||_2^2$.
-   - Identifies non-linear anomalies that evade classical threshold rules.
-
-4. **Composite Risk Engine (`src/risk_engine.py`)**:
-   - Fuses all three models: $\text{Risk} = 100 \times (0.35 S_{\text{base}} + 0.35 S_{\text{IF}} + 0.30 S_{\text{AE}})$.
-   - Outputs policy decisions: `ALLOW`, `MONITOR`, `ALERT_ADMIN`, `ISOLATE_DEVICE`.
+Given an observed history of time-windowed network states $S_t \in \mathbb{R}^{32}$ (active flows, TCP flag distributions, port diversity, packet size variance, timing dynamics), the World Model:
+1. **Simulates Environment Physics**: Predicts the next network state $\hat{S}_{t+1}$.
+2. **Performs $K$-Step Forward Simulation**: Autoregressively rolls forward $K$ steps into the future $[\hat{S}_{t+1}, \dots, \hat{S}_{t+K}]$.
+3. **Forecasts Infiltration Probability**: Outputs a time-series likelihood of infiltration $[P_1, \dots, P_K]$ across future time windows before compromise is completed.
+4. **Maps MITRE ATT&CK Progression**: Anticipates tactical escalation through canonical phases:
+   $$\text{Reconnaissance} \longrightarrow \text{Initial Access} \longrightarrow \text{Infiltration / Lateral Movement} \longrightarrow \text{Command \& Control} \longrightarrow \text{Exfiltration / Impact}$$
+5. **Explainable AI (XAI)**: Identifies exact driving signals (e.g. `syn_ratio`, `unique_dst_ports`, `flow_bytes_rate`) via temporal self-attention weights and gradient-based input feature attribution.
 
 ---
 
-## 📊 Dataset: CERT Insider Threat Test Dataset (r4.2)
+## 🏗️ Deep World Model Architecture
 
-The engine trains and benchmarks against the **CMU CERT r4.2** dataset located in `data/`:
-- `data/r4.2/device.csv`: Removable USB drives connection/disconnection logs.
-- `data/r4.2/file.csv`: Files copied to removable media (.doc, .pdf, .zip, .exe).
-- `data/r4.2/email.csv`: Internal and external communications (size, external recipients, BCCs).
-- `data/r4.2/http.csv`: Web requests (URLs, search terms, cloud storage, hacking portals).
-- `data/r4.2/LDAP/`: Organizational role and department hierarchy.
-- `data/answers/`: Ground truth red team insider attacks:
-  - **Scenario 1**: After-hours USB connection + sensitive file copy + Wikileaks upload.
-  - **Scenario 2**: Job searching + massive data theft to USB before resignation.
-  - **Scenario 3**: System administrator keylogger sabotage & impersonation.
+```
+Observed Sequence [S_{t-W+1}, ..., S_t] (History Window W=8)
+                         │
+                         ▼
+        [ State Latent Encoder (Linear + LayerNorm) ]
+                         │  z_t in R^64
+                         ▼
+     [ Recurrent Causal Core (2-Layer LSTM) ]
+                         │
+                         ▼
+        [ Temporal Multi-Head Self-Attention ] ──► Sequence Attention Weights
+                         │  h_t in R^64
+     ┌───────────────────┼───────────────────┐
+     ▼                   ▼                   ▼
+[ Dynamics Head ]  [ Infiltration Head ]  [ MITRE Stage Head ]
+  \hat{S}_{t+1}       P(Infiltration)        P(Stage 0..5)
+     │
+     └── Autoregressive Rollout Loop (k = 1 ... K) ──► Forward Risk Trajectory
+```
+
+### Composite Multi-Task Training Objective
+$$\mathcal{L} = \mathcal{L}_{\text{dynamics}} + 1.5 \mathcal{L}_{\text{infiltration}} + 1.0 \mathcal{L}_{\text{stage}}$$
+
+- **Dynamics Loss**: $\frac{1}{D} \|\hat{S}_{t+1} - S_{t+1}\|_2^2$ (State transition error).
+- **Infiltration Loss**: Binary Cross-Entropy with Logits.
+- **MITRE Stage Loss**: Categorical Cross-Entropy across canonical attack phases.
 
 ---
 
-## 🚀 Running the Training & Evaluation Pipeline
+## 📊 32-Dimensional Network State Vector ($S_t$)
 
-### 1. Install Dependencies
-```bash
-uv sync
-```
+Each consecutive time window ($\Delta t = 15\text{s}$) aggregates individual flows into a structured state vector:
 
-### 2. Run Full Training & Benchmarking
-```bash
-uv run python train.py
-```
-
-### Options:
-- `--data-dir`: Path to dataset directory (default: `data`)
-- `--models-dir`: Output directory for trained models (default: `models`)
-- `--reports-dir`: Output directory for benchmark JSON reports (default: `reports`)
-- `--max-http-chunks`: Max chunks to stream from 14GB `http.csv` (default: 50)
-- `--epochs`: Training epochs for PyTorch Autoencoder (default: 35)
-- `--no-cache`: Re-extract features directly from raw CSV files
+| Category | Extracted Features |
+| :--- | :--- |
+| **Volumetric Dynamics** | `flow_count`, `tot_fwd_pkts`, `tot_bwd_pkts`, `tot_fwd_bytes`, `tot_bwd_bytes`, `flow_bytes_rate`, `flow_pkts_rate`, `flow_duration_mean` |
+| **TCP Flag Bitmasks** | `syn_flag_count`, `syn_ratio`, `ack_flag_count`, `ack_ratio`, `rst_flag_count`, `fin_flag_count`, `psh_flag_count`, `urg_flag_count` |
+| **Port & Protocol Diversity** | `unique_dst_ports`, `ephemeral_port_ratio` ($\ge 1024$), `web_port_ratio` (80/443), `dns_port_ratio` (53), `ssh_ftp_port_ratio` (21/22), `tcp_protocol_ratio`, `udp_protocol_ratio` |
+| **Timing & Packet Stats** | `pkt_len_mean`, `pkt_len_std`, `flow_iat_mean`, `flow_iat_std`, `flow_iat_max`, `down_up_ratio_mean` |
+| **Session State** | `init_fwd_win_mean` (TCP window size), `active_duration_mean`, `idle_duration_mean` |
 
 ---
 
@@ -96,19 +76,84 @@ uv run python train.py
 ```
 ml/
 ├── data/
-│   ├── r4.2/               # CERT activity logs
-│   ├── answers/            # Ground truth insider scenarios
-│   └── cache/              # Cached parquet feature vectors
-├── models/                 # Serialized model checkpoints (.joblib, .pt)
-├── reports/                # Evaluation & benchmark metrics (JSON)
+│   ├── external-network/
+│   │   ├── cic-ids-2018/          # CSE-CIC-IDS2018 multi-attack flow CSVs
+│   │   └── cic-iot-2023/          # CIC-IoT-2023 reconnaissance & attack captures
+│   ├── internal-network/          # Legacy insider threat datasets
+│   └── cache/                     # Cached parquet state matrices for instant re-runs
+├── models/
+│   ├── world_model.pt             # Trained PyTorch World Model weights & scalers
+│   └── baseline_classifier.joblib # Trained static Logistic Regression baseline
+├── reports/
+│   └── world_model_benchmark.json # Head-to-head comparison metrics & lead time
 ├── src/
-│   ├── preprocessing/      # Chunked streaming CSV loaders
-│   ├── features/           # 23-dimension behavioral feature extractor
-│   ├── baseline/           # Statistical Z-score baseline engine
-│   ├── isolation_forest/   # Scikit-learn Isolation Forest detector
-│   ├── autoencoders/       # PyTorch Autoencoder deep neural network
-│   ├── evalutation/        # Precision, Recall, ROC-AUC, scenario benchmark
-│   └── risk_engine.py      # Multi-model risk fusion & policy engine
-├── train.py                # Unified CLI entry point
-└── pyproject.toml          # Project configuration & dependencies
+│   ├── features/
+│   │   ├── traffic_extractor.py   # Flow CSV (CIC-IDS-2018) & raw PCAP parser
+│   │   └── state_window.py        # 15s state aggregator & sequence windowing
+│   ├── world_model/
+│   │   ├── network_world_model.py # Attention-augmented recurrent World Model
+│   │   ├── forward_simulator.py   # K-step autoregressive rollout engine
+│   │   └── explainability.py      # Temporal attention & gradient attribution
+│   ├── baseline/
+│   │   └── static_baseline.py     # Static Logistic Regression classifier
+│   ├── evaluation/
+│   │   └── benchmark.py           # Evaluation metrics & comparative reporting
+│   └── mitre_mapping.py           # Attack label to MITRE ATT&CK phase mapping
+├── train.py                       # Unified training and benchmarking CLI
+├── demo.py                        # Interactive forward simulation demonstration CLI
+└── pyproject.toml                 # Package dependencies
 ```
+
+---
+
+## 🚀 Quickstart: Training & Running Inference
+
+### 1. Run the Training Pipeline
+Trains the World Model, trains the Logistic Regression baseline, computes benchmark metrics, and runs a live forward simulation:
+
+```bash
+cd ml
+uv run python train.py --sample-frac 0.15 --epochs 12
+```
+
+**Key CLI Options:**
+- `--sample-frac`: Subsampling fraction per file for rapid prototyping (default: `0.15`).
+- `--epochs`: Training epochs (default: `12`).
+- `--window-size`: Aggregation window in seconds (default: `15`).
+- `--seq-len`: Context history window length $W$ (default: `8`).
+- `--no-cache`: Force re-extraction from raw CSV files.
+
+### 2. Run Interactive Forward Simulation Demo
+Accepts any network flow CSV or PCAP capture file, runs forward simulation $K$ steps ahead, and displays or exports the infiltration probability timeline, predicted MITRE stage, and driving feature attributions:
+
+```bash
+cd ml
+# Run simulation and output to terminal
+uv run python demo.py --file data/external-network/cic-ids-2018/Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv --rollout-steps 5
+
+# Export publication-quality report to Markdown or Plain Text file:
+uv run python demo.py --file data/external-network/cic-ids-2018/Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv --output reports/thursday_report.md
+uv run python demo.py --file data/external-network/cic-ids-2018/Wednesday-14-02-2018_TrafficForML_CICFlowMeter.csv --output reports/wednesday_report.txt --format txt
+
+# Evaluate specific scenarios (attack progression, onset transition, or benign baseline):
+uv run python demo.py --file data/external-network/cic-ids-2018/Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv --scenario benign
+uv run python demo.py --file data/external-network/cic-ids-2018/Wednesday-14-02-2018_TrafficForML_CICFlowMeter.csv --scenario attack
+```
+
+**Key Demo CLI Options:**
+- `--file`: Path to input flow CSV (e.g. CIC-IDS-2018) or raw `.pcap` capture.
+- `--output` / `-o`: File path to dump the simulation report (e.g. `reports/report.md` or `reports/report.txt`).
+- `--format`: Report format: `markdown` or `txt` (auto-inferred from file extension).
+- `--scenario`: Evaluation scenario: `auto` (targets active threat progression if attacks exist, else benign), `attack` (evaluates peak threat sequence), `onset` (evaluates benign-to-attack transition), or `benign` (evaluates nominal operation).
+- `--window-idx`: Explicit integer window index to simulate.
+- `--rollout-steps`: Number of forecast rollout steps $K$ into the future (default: `5`).
+- `--window-size`: Temporal state window size $W$ in seconds (default: `15`).
+
+---
+
+## ⚔️ Benchmark: World Model vs. Static Baseline
+
+The evaluation suite automatically measures the measurable advantage provided by temporal dynamics learning:
+- **Higher F1-Score and Precision**: Reduces false positives by learning normal flow progression patterns.
+- **Lower False Positive Rate (FPR)**: Distinguishes between harmless spikes and coordinated kill chains.
+- **Proactive Early Warning Lead Time**: While static classifiers only trigger *after* an attack completes, the World Model detects trajectory convergence **$K$ steps in advance**, enabling automated quarantine before compromise is finalized.

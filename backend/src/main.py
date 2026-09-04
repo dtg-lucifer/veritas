@@ -1,7 +1,8 @@
 """
-Internal Firewall - FastAPI Gateway Backend with Multithreaded 5-Minute Window Redis Queue Worker.
-Provides REST routes, 5-minute stateful window log aggregation, policy enforcement,
-multithreaded Redis message broker consumer, and live WebSocket incident feeds for the SOC security dashboard.
+Internal Firewall - FastAPI Gateway Backend with Kafka Ingestion & AI World Model Forward Simulation.
+Consumes real-time/replayed flow telemetry from Apache Kafka, aggregates 15-second state vectors,
+performs K-step autoregressive forward simulation, enforces policy actions,
+and streams live security incidents via WebSockets to SOC dashboards.
 """
 
 from typing import List, Dict, Any, Optional
@@ -17,19 +18,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from rich.console import Console
 
-from src.predictor import SecurityModelPredictor
-from src.log_buffer import TimeWindowLogAggregator
-from src.redis_worker import MultithreadedRedisLogWorker, REDIS_URL, REDIS_QUEUE_KEY, ALERT_THRESHOLD, WINDOW_SECONDS
+from src.world_model_service import WorldModelService
+from src.kafka_worker import KafkaFlowConsumerWorker, KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC
 
 load_dotenv()
 
 console = Console()
 
 # Global in-memory components
-predictor = SecurityModelPredictor()
-log_buffer = TimeWindowLogAggregator(window_seconds=WINDOW_SECONDS)
 recent_alerts: List[Dict[str, Any]] = []
 blocked_users_and_ips: Dict[str, Dict[str, Any]] = {}
+
+# Initialize AI World Model Service
+world_model_service = WorldModelService(
+    window_size_seconds=int(os.getenv("WINDOW_SECONDS", "15")),
+    rollout_steps=int(os.getenv("ROLLOUT_STEPS", "5")),
+    alert_threshold=float(os.getenv("ALERT_THRESHOLD", "40.0")),
+)
 
 
 # --- WEBSOCKET CONNECTION MANAGER ---
@@ -57,38 +62,34 @@ class WebSocketHub:
             except Exception:
                 self.disconnect(connection)
 
+
 ws_hub = WebSocketHub()
 
+# --- KAFKA CONSUMER WORKER SETUP ---
 
-# --- MULTITHREADED REDIS QUEUE WORKER SETUP ---
-
-redis_worker = MultithreadedRedisLogWorker(
-    log_buffer=log_buffer,
-    predictor=predictor,
+kafka_worker = KafkaFlowConsumerWorker(
+    world_model_service=world_model_service,
     broadcast_callback=ws_hub.broadcast,
     alerts_list=recent_alerts,
-    redis_url=REDIS_URL,
-    queue_key=REDIS_QUEUE_KEY,
-    alert_threshold=ALERT_THRESHOLD,
-    window_seconds=WINDOW_SECONDS
+    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", KAFKA_BOOTSTRAP_SERVERS),
+    topic=os.getenv("KAFKA_TOPIC", KAFKA_TOPIC),
 )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Launch Redis Queue Consumer & 5-minute Timer in dedicated background OS threads
-    running_loop = asyncio.get_running_loop()
-    redis_worker.start(loop=running_loop)
+    # Startup: Start Kafka Consumer Worker asynchronously
+    await kafka_worker.start()
     yield
-    # Shutdown: Stop Worker Threads Gracefully
-    redis_worker.stop()
+    # Shutdown: Stop Kafka Consumer Worker gracefully
+    await kafka_worker.stop()
 
 
 app = FastAPI(
-    title="🛡️ Internal Firewall - Security Gateway & Anomaly Backend",
-    description="SIH 2026: Multithreaded 5-Minute Behavioral Window Aggregation & Ensemble ML Anomaly Detection Gateway with Redis MQ.",
-    version="1.0.0",
-    lifespan=lifespan
+    title="🛡️ Internal Firewall - AI World Model Gateway & SOC Stream",
+    description="SIH 2026: Apache Kafka Stream Ingestion, 15s Network State Aggregation, Autoregressive Forward Simulation & Threat Alerts.",
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware for Next.js / React SOC Dashboard
@@ -103,178 +104,177 @@ app.add_middleware(
 
 # --- PYDANTIC SCHEMAS ---
 
-class PredictRequest(BaseModel):
-    user: str = Field(..., example="AAM0658")
-    timestamp: Optional[str] = Field(None, example="2026-08-21")
-    features: Dict[str, float] = Field(..., description="30-dimension behavioral feature dictionary")
-
-class NetworkLogEvent(BaseModel):
-    event_id: Optional[str] = Field(None, example="evt-1001")
-    timestamp: Optional[str] = Field(None, example="2026-08-21T10:15:00Z")
-    user: str = Field(..., example="AAM0658")
-    src_ip: Optional[str] = Field("10.0.4.21", example="10.0.4.21")
-    dst_ip: Optional[str] = Field("142.250.190.46", example="142.250.190.46")
-    src_port: Optional[int] = Field(52341, example=52341)
+class NetworkFlowRecord(BaseModel):
+    timestamp: Optional[str] = Field(None, example="2026-09-04 10:15:00")
     dst_port: Optional[int] = Field(443, example=443)
-    protocol: Optional[str] = Field("TCP", example="TCP")
-    event_type: str = Field(..., example="http", description="http, device, file_copy, email, connection")
-    activity: Optional[str] = Field(None, example="Connect")
-    url: Optional[str] = Field(None, example="https://wikileaks.org/upload")
-    filename: Optional[str] = Field(None, example="classified_database_dump.zip")
-    file_extension: Optional[str] = Field(None, example=".zip")
-    size: Optional[float] = Field(None, example=45000000)
-    download_bytes: Optional[float] = Field(None, example=45000000)
-    upload_bytes: Optional[float] = Field(None, example=1024)
-    to: Optional[str] = Field(None, example="external@competitor.com")
-    bcc: Optional[str] = Field(None, example="home@gmail.com")
+    protocol: Optional[int] = Field(6, example=6)
+    flow_duration: Optional[float] = Field(120000.0, example=120000.0)
+    tot_fwd_pkts: Optional[int] = Field(10, example=10)
+    tot_bwd_pkts: Optional[int] = Field(8, example=8)
+    tot_fwd_bytes: Optional[int] = Field(4500, example=4500)
+    tot_bwd_bytes: Optional[int] = Field(8200, example=8200)
+    flow_bytes_per_sec: Optional[float] = Field(1058.0, example=1058.0)
+    flow_pkts_per_sec: Optional[float] = Field(15.0, example=15.0)
+    syn_flag_cnt: Optional[int] = Field(1, example=1)
+    ack_flag_cnt: Optional[int] = Field(1, example=1)
+    rst_flag_cnt: Optional[int] = Field(0, example=0)
+    fin_flag_cnt: Optional[int] = Field(0, example=0)
+    psh_flag_cnt: Optional[int] = Field(1, example=1)
+    urg_flag_cnt: Optional[int] = Field(0, example=0)
+    label: Optional[str] = Field("Benign", example="Benign")
+
 
 class PolicyEnforceRequest(BaseModel):
-    user: str
-    target_ip: Optional[str] = "10.0.4.21"
+    target_ip: str = Field("10.0.4.21", example="10.0.4.21")
     action: str = Field("ISOLATE_DEVICE", example="ISOLATE_DEVICE")
-    reason: Optional[str] = "Critical behavioral anomaly detected"
+    reason: Optional[str] = "Critical forward infiltration risk detected by AI World Model"
 
 
 # --- API ROUTES ---
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint confirming model status & multithreaded Redis worker metrics."""
+    """Health check endpoint confirming World Model status, Kafka consumer, and WebSocket connections."""
+    wm_status = world_model_service.get_status()
     return {
         "status": "healthy",
-        "service": "Internal Firewall AI/ML Backend",
+        "service": "Internal Firewall AI World Model Backend",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "models_ready": True,
+        "model_ready": wm_status["model_loaded"],
         "active_ws_subscribers": len(ws_hub.active_connections),
-        "window_seconds": redis_worker.window_seconds,
-        "alert_threshold": redis_worker.alert_threshold,
-        "redis_worker": {
-            "queue": REDIS_QUEUE_KEY,
-            "consumer_thread": redis_worker._consumer_thread.name if redis_worker._consumer_thread else None,
-            "timer_thread": redis_worker._timer_thread.name if redis_worker._timer_thread else None,
-            "is_alive": redis_worker.is_running,
-            "ingested_count": redis_worker.ingested_count,
-            "windows_evaluated": redis_worker.windows_evaluated,
-            "alerts_generated": redis_worker.alerts_generated,
-        }
+        "kafka_worker": {
+            "topic": kafka_worker.topic,
+            "bootstrap_servers": kafka_worker.bootstrap_servers,
+            "is_running": kafka_worker.is_running,
+        },
+        "world_model": {
+            "window_size_seconds": wm_status["window_size_seconds"],
+            "rollout_steps": wm_status["rollout_steps"],
+            "alert_threshold": wm_status["alert_threshold"],
+            "flows_ingested": wm_status["metrics"]["flows_ingested"],
+            "windows_evaluated": wm_status["metrics"]["windows_evaluated"],
+            "simulations_completed": wm_status["metrics"]["simulations_completed"],
+            "alerts_generated": wm_status["metrics"]["alerts_generated"],
+            "peak_risk_observed": wm_status["metrics"]["peak_risk_observed"],
+        },
     }
 
 
-@app.get("/api/v1/redis/status")
-def get_redis_worker_status():
-    """Returns real-time queue processing and worker thread statistics."""
+@app.get("/api/v1/kafka/status")
+def get_kafka_status():
+    """Returns Kafka consumer connectivity and flow ingestion telemetry."""
     return {
-        "redis_url": REDIS_URL,
-        "queue_key": REDIS_QUEUE_KEY,
-        "is_running": redis_worker.is_running,
-        "window_seconds": redis_worker.window_seconds,
-        "alert_threshold": redis_worker.alert_threshold,
-        "ingested_count": redis_worker.ingested_count,
-        "windows_evaluated": redis_worker.windows_evaluated,
-        "alerts_generated": redis_worker.alerts_generated
+        "topic": kafka_worker.topic,
+        "bootstrap_servers": kafka_worker.bootstrap_servers,
+        "is_running": kafka_worker.is_running,
+        "flows_ingested": world_model_service.metrics["flows_ingested"],
+        "pending_flows": len(world_model_service.flow_buffer),
+        "windows_evaluated": world_model_service.metrics["windows_evaluated"],
     }
 
 
-@app.post("/api/v1/predict")
-def predict_direct(payload: PredictRequest):
-    """
-    Direct model evaluation endpoint for a pre-computed 30-dimension behavioral feature vector.
-    Uses full 4-model ensemble (LightGBM + Baseline + Isolation Forest + Autoencoder).
-    """
-    ts = payload.timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    result = predictor.evaluate_features(payload.user, ts, payload.features, include_autoencoder=True)
-    return result
+@app.get("/api/v1/simulation/latest")
+def get_latest_simulation():
+    """Returns the most recent K-step forward simulation rollout report."""
+    if not world_model_service.latest_report:
+        return {
+            "status": "WAITING_FOR_DATA",
+            "message": "Awaiting network flow ingestion to compile initial temporal window.",
+        }
+    return {
+        "status": "OK",
+        "simulation": world_model_service.latest_report,
+    }
+
+
+@app.get("/api/v1/simulation/status")
+def get_simulation_status():
+    """Returns complete stateful metrics and active state vector count."""
+    return world_model_service.get_status()
+
+
+@app.post("/api/v1/simulation/reset")
+def reset_simulation():
+    """Resets flow buffer and historical state window context for clean baseline tests."""
+    world_model_service.reset()
+    recent_alerts.clear()
+    return {
+        "status": "RESET_SUCCESSFUL",
+        "message": "World Model state history and alerts cleared.",
+    }
+
 
 
 @app.post("/api/v1/logs/ingest")
-async def ingest_network_log(event: NetworkLogEvent):
+async def ingest_network_flow(flow: NetworkFlowRecord):
     """
-    Direct HTTP Ingestion endpoint (Silent Ingest).
-    Buffers event into the user's 5-minute sliding window without immediate prediction.
-    Prediction occurs at the 5-minute timer cycle.
+    Direct HTTP flow ingestion endpoint.
+    Allows pushing flow records directly to the backend flow buffer without going through Kafka.
     """
-    evt_dict = event.model_dump()
-    log_buffer.ingest(evt_dict)
-    
+    flow_dict = flow.model_dump()
+    world_model_service.ingest_flow(flow_dict)
     return {
-        "status": "QUEUED_IN_WINDOW",
-        "user": event.user,
-        "window_events_count": log_buffer.get_user_event_count(event.user)
+        "status": "INGESTED",
+        "buffered_flows": len(world_model_service.flow_buffer),
     }
 
 
 @app.get("/api/v1/alerts")
 def get_recent_alerts():
-    """Returns recent high-risk security incidents for the Dashboard."""
+    """Returns recent forward threat alerts generated by the World Model."""
     return {
         "total_alerts": len(recent_alerts),
-        "alerts": recent_alerts
-    }
-
-
-@app.get("/api/v1/users/{user}/window")
-def get_user_window(user: str):
-    """Returns active 5-minute time window state & manual evaluation on-demand."""
-    date_key, features, event_count = log_buffer.aggregate_window(user)
-    assessment = predictor.evaluate_features(user, date_key, features, include_autoencoder=True)
-    return {
-        "user": user,
-        "event_count": event_count,
-        "date_key": date_key,
-        "features": features,
-        "assessment": assessment
+        "alerts": recent_alerts,
     }
 
 
 @app.post("/api/v1/policy/enforce")
 async def enforce_policy(req: PolicyEnforceRequest):
-    """
-    Simulates / triggers firewall isolation (e.g. iptables / nftables rule generation).
-    """
-    blocked_users_and_ips[req.user] = {
+    """Triggers or simulates host/subnet isolation based on forward simulation alerts."""
+    blocked_users_and_ips[req.target_ip] = {
         "ip": req.target_ip,
         "action": req.action,
         "reason": req.reason,
-        "isolated_at": datetime.now(timezone.utc).isoformat()
+        "isolated_at": datetime.now(timezone.utc).isoformat(),
     }
-    
+
     # Broadcast firewall policy action
     await ws_hub.broadcast({
         "type": "FIREWALL_POLICY_ENFORCED",
         "data": {
-            "user": req.user,
             "ip": req.target_ip,
             "action": req.action,
-            "reason": req.reason
-        }
+            "reason": req.reason,
+        },
     })
-    
+
     return {
         "status": "POLICY_APPLIED",
         "action": req.action,
-        "target": f"{req.user} ({req.target_ip})",
-        "message": f"Device {req.target_ip} successfully isolated from internal subnet."
+        "target": req.target_ip,
+        "message": f"Target {req.target_ip} successfully blocked/isolated by firewall policy.",
     }
 
 
-# WebSocket endpoints
+# --- WEBSOCKET ENDPOINTS ---
+
 @app.websocket("/ws")
 @app.websocket("/ws/alerts")
 @app.websocket("/api/v1/ws/alerts")
 async def websocket_alerts_feed(websocket: WebSocket):
     """
-    Live WebSocket endpoint streaming real-time security alerts to Postman and SOC dashboards.
-    Alerts are pushed automatically when a 5-minute window evaluation exceeds the risk threshold (>= 65).
+    Live WebSocket endpoint streaming real-time forward simulation threat alerts
+    to SOC dashboards and Postman.
     """
     await ws_hub.connect(websocket)
     try:
-        # Send an immediate connection welcome message so Postman confirms the channel is live
+        # Welcome message acknowledging connection
         await websocket.send_json({
             "type": "CONNECTION_ESTABLISHED",
-            "message": "Connected to Internal Firewall Security Incident Stream",
+            "message": "Connected to AI World Model Threat Telemetry Stream",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "window_seconds": redis_worker.window_seconds,
-            "alert_threshold": redis_worker.alert_threshold
+            "window_size_seconds": world_model_service.window_size_seconds,
+            "rollout_steps": world_model_service.rollout_steps,
         })
         while True:
             # Keep-alive loop

@@ -1,0 +1,53 @@
+=====================================================================================
+ AI WORLD MODEL CYBER DEFENSE — FORWARD SIMULATION REPORT
+=====================================================================================
+Generated At:             2026-09-04 23:09:49
+Evaluated File:           Wednesday-14-02-2018_TrafficForML_CICFlowMeter.csv
+Aggregation Window:       15s
+Forecast Horizon:         5 steps (+75s)
+Scenario Context:         Active attack progression sequence centered near peak FTP-BruteForce activity (Window 1738)
+Max Forecasted Risk:      99.9% (CRITICAL)
+Peak Anticipated Stage:   Initial Access
+Enforced Policy Action:   ISOLATE_DEVICE
+-------------------------------------------------------------------------------------
+
+1. OBSERVED NETWORK STATE HISTORY
+-------------------------------------------------------------------------------------
+Window Time        Flows    SYN Ratio   Unique Ports  Byte Rate(KB/s) Dominant Label    
+-------------------------------------------------------------------------------------
+11:09:30             783        0.003             75            338.8 FTP-BruteForce    
+11:09:45             831        0.004             63             41.1 FTP-BruteForce    
+11:10:00             801        0.003             51            104.4 FTP-BruteForce    
+11:10:15            1176        0.002             60            101.0 FTP-BruteForce    
+11:10:30            2095        0.002            157            237.0 FTP-BruteForce    
+11:10:45             790        0.003             54            113.9 FTP-BruteForce    
+11:11:00             977        0.005            106            101.0 FTP-BruteForce    
+11:11:15            1000        0.003             67             47.8 FTP-BruteForce    
+-------------------------------------------------------------------------------------
+
+2. K-STEP FORWARD SIMULATION ROLLOUT
+-------------------------------------------------------------------------------------
+Forecast Step    Lead Time      Risk % MITRE Stage             Sim Flows Status       Policy Action   
+-------------------------------------------------------------------------------------
+Step t+1          +15s         98.9% Initial Access                144 CRITICAL     ISOLATE_DEVICE  
+Step t+2          +30s         99.4% Initial Access                145 CRITICAL     ISOLATE_DEVICE  
+Step t+3          +45s         99.7% Initial Access                145 CRITICAL     ISOLATE_DEVICE  
+Step t+4          +60s         99.9% Initial Access                145 CRITICAL     ISOLATE_DEVICE  
+Step t+5          +75s         99.9% Initial Access                145 CRITICAL     ISOLATE_DEVICE  
+-------------------------------------------------------------------------------------
+
+3. EXPLAINABILITY & THREAT FEATURE ATTRIBUTION
+-------------------------------------------------------------------------------------
+Max Forecasted Infiltration Risk: 99.9%
+Anticipated Attack Stage:         Initial Access
+
+Top Contributing Network Signals:
+  • flow_count               :  25.6% attribution (Observed: 1000.00)
+  • flow_pkts_rate           :  16.5% attribution (Observed: 631277.31)
+  • psh_flag_count           :   9.5% attribution (Observed: 638.00)
+  • ack_flag_count           :   7.2% attribution (Observed: 122.00)
+  • tot_bwd_pkts             :   4.9% attribution (Observed: 2244.00)
+
+SOC Guidance & Incident Attribution:
+  [HIGH RISK] Forward dynamics forecast threat escalation driven primarily by: flow count: 1000.00; sudden volumetric traffic surge (16% attribution); psh flag count: 638.00.
+=====================================================================================

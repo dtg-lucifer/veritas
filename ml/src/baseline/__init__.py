@@ -1,4 +1,3 @@
-"""Baseline modules"""
-from .statistical_baseline import UserBaselineProfiler
+from src.baseline.static_baseline import StaticBaselineClassifier
 
-__all__ = ["UserBaselineProfiler"]
+__all__ = ["StaticBaselineClassifier"]
