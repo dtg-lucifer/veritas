@@ -370,9 +370,13 @@ class PacketParser:
             user = self.resolve_user(src_ip, headers)
             event_id = f"pkt-{uuid.uuid4().hex[:12]}"
 
+            # Compute pure control ACK flag (matches CICFlowMeter standard, avoiding 100% ACK ratio inflation on data packets)
+            is_pure_ack = 1 if (ack_flag == 1 and syn_flag == 0 and fin_flag == 0 and psh_flag == 0 and pkt_len <= 66) else 0
+
             # 6. Build Standardized Flow Record for AI World Model & Kafka
             flow_record = {
                 # Required features for StateWindowAggregator (32-D State Vector)
+                # Note: Per-packet deltas are used so StateWindowAggregator sums reflect actual window totals
                 "event_id": event_id,
                 "timestamp": formatted_timestamp,
                 "iso_timestamp": iso_timestamp,
@@ -383,10 +387,10 @@ class PacketParser:
                 "protocol": int(protocol_num),
                 "protocol_name": protocol_name,
                 "flow_duration": float(duration_us),
-                "tot_fwd_pkts": int(session.fwd_pkts),
-                "tot_bwd_pkts": int(session.bwd_pkts),
-                "tot_fwd_bytes": int(session.fwd_bytes),
-                "tot_bwd_bytes": int(session.bwd_bytes),
+                "tot_fwd_pkts": 1 if is_fwd else 0,
+                "tot_bwd_pkts": 0 if is_fwd else 1,
+                "tot_fwd_bytes": int(pkt_len) if is_fwd else 0,
+                "tot_bwd_bytes": 0 if is_fwd else int(pkt_len),
                 "flow_bytes_per_sec": float(flow_bytes_per_sec),
                 "flow_pkts_per_sec": float(flow_pkts_per_sec),
                 "flow_iat_mean": float(flow_iat_mean),
@@ -395,7 +399,7 @@ class PacketParser:
                 "fwd_iat_mean": float(fwd_iat_mean),
                 "bwd_iat_mean": float(bwd_iat_mean),
                 "syn_flag_cnt": int(syn_flag),
-                "ack_flag_cnt": int(ack_flag),
+                "ack_flag_cnt": int(is_pure_ack),
                 "rst_flag_cnt": int(rst_flag),
                 "fin_flag_cnt": int(fin_flag),
                 "psh_flag_cnt": int(psh_flag),
@@ -404,8 +408,8 @@ class PacketParser:
                 "pkt_len_mean": float(pkt_len_mean),
                 "pkt_len_std": float(pkt_len_std),
                 "down_up_ratio": float(down_up_ratio),
-                "init_fwd_win_bytes": int(session.init_fwd_win),
-                "init_bwd_win_bytes": int(session.init_bwd_win),
+                "init_fwd_win_bytes": int(window_size) if protocol_num == 6 else 0,
+                "init_bwd_win_bytes": int(session.init_bwd_win) if protocol_num == 6 else 0,
                 "active_mean": float(duration_us),
                 "idle_mean": 0.0,
                 "label": "Benign",

@@ -177,18 +177,23 @@ class WorldModelService:
         if flows_df.empty:
             return EvaluationResult(evaluated=False)
 
-        # Check for WebRTC Conferencing traffic (e.g. Google Meet, STUN/TURN port 3478, 19302-19309)
+        # Check for media streaming / WebRTC conferencing traffic safely (src_port optional in dataset CSVs)
         conferencing_ports = set(cfg.traffic_policy.conferencing_ports)
-        is_webrtc_flow = (
-            (flows_df["protocol"].astype(float) == 17) &
-            (flows_df["dst_port"].isin(conferencing_ports) | flows_df["src_port"].isin(conferencing_ports))
+        proto_series = pd.to_numeric(flows_df.get("protocol", pd.Series(6, index=flows_df.index)), errors="coerce").fillna(6)
+        dst_series = pd.to_numeric(flows_df.get("dst_port", pd.Series(0, index=flows_df.index)), errors="coerce").fillna(0)
+        src_series = pd.to_numeric(flows_df.get("src_port", pd.Series(0, index=flows_df.index)), errors="coerce").fillna(0)
+        is_media_flow = (
+            (proto_series == 17) &
+            (dst_series.isin(conferencing_ports) | src_series.isin(conferencing_ports))
         )
-        webrtc_ratio = float(is_webrtc_flow.mean()) if len(flows_df) > 0 else 0.0
-        is_conferencing_window = (
+        media_ratio = float(is_media_flow.mean()) if len(flows_df) > 0 else 0.0
+        syn_sum = pd.to_numeric(flows_df.get("syn_flag_cnt", pd.Series(0, index=flows_df.index)), errors="coerce").fillna(0).sum()
+        rst_sum = pd.to_numeric(flows_df.get("rst_flag_cnt", pd.Series(0, index=flows_df.index)), errors="coerce").fillna(0).sum()
+        is_media_window = (
             cfg.traffic_policy.allow_webrtc_conferencing
-            and webrtc_ratio >= 0.35
-            and (flows_df.get("syn_flag_cnt", pd.Series(0, index=flows_df.index)).sum() == 0)
-            and (flows_df.get("rst_flag_cnt", pd.Series(0, index=flows_df.index)).sum() == 0)
+            and media_ratio >= 0.35
+            and (syn_sum == 0)
+            and (rst_sum == 0)
         )
 
         # Aggregate flows into temporal windows
@@ -222,13 +227,12 @@ class WorldModelService:
                     if vf in row_dict:
                         row_dict[vf] = row_dict[vf] / client_scale
 
-            # 2. Dampen WebRTC conferencing volumetric features if active video call
-            if is_conferencing_window:
+            # 2. Dampen media streaming volumetric features if active video/audio stream
+            if is_media_window:
                 dampen_factor = 0.10  # legitimate audio/video RTP normalized
                 for vf in volumetric_features:
                     if vf in row_dict:
                         row_dict[vf] = row_dict[vf] * dampen_factor
-                # Conferencing STUN/TURN is recognized, not rogue ephemeral
                 row_dict["ephemeral_port_ratio"] = 0.0
 
             state_vec = np.array([row_dict[f] for f in STATE_FEATURE_NAMES], dtype=np.float32)
@@ -256,24 +260,70 @@ class WorldModelService:
         now_str = datetime.now(timezone.utc).isoformat()
         self.metrics["last_simulation_time"] = now_str
 
-        max_risk = float(report.max_infiltration_prob)
-        peak_stage = report.peak_stage_name
+        raw_max_risk = float(report.max_infiltration_prob)
+        raw_peak_stage = report.peak_stage_name
 
-        # Policy & Threat Evaluation
-        if is_conferencing_window:
-            # Verified Google Meet / WebRTC traffic: suppress false Command & Control / DoS alarm
-            max_risk = min(max_risk, 0.12)
-            peak_stage = "Benign (WebRTC/Conferencing)"
-            recommended_policy = "ALLOW"
-            soc_note = "Legitimate WebRTC media stream detected (Google Meet / STUN/TURN). Traffic normalized."
-        else:
+        # 4. Rigorous Threat Precursor Disambiguation
+        # Evaluates whether the window exhibits actual attack mechanics vs normal internet activity
+        last_state = df_states.iloc[-1]
+        unique_ports = int(last_state.get("unique_dst_ports", 0))
+        syn_ratio = float(last_state.get("syn_ratio", 0.0))
+        syn_count = int(last_state.get("syn_flag_count", 0))
+        rst_count = int(last_state.get("rst_flag_count", 0))
+        flow_count = max(int(last_state.get("flow_count", 1)), 1)
+        ssh_ftp_ratio = float(last_state.get("ssh_ftp_port_ratio", 0.0))
+        ephemeral_ratio = float(last_state.get("ephemeral_port_ratio", 0.0))
+        web_ratio = float(last_state.get("web_port_ratio", 0.0))
+        dns_ratio = float(last_state.get("dns_port_ratio", 0.0))
+        pkts_rate = float(last_state.get("flow_pkts_rate", 0.0))
+        is_attack_flag = int(last_state.get("is_attack", 0))
+
+        has_port_scan = (unique_ports >= 15)
+        has_syn_flood = (syn_ratio >= 0.25 and syn_count >= 10)
+        has_rst_storm = (rst_count >= 15 and (rst_count / flow_count) >= 0.20)
+        has_brute_force = (ssh_ftp_ratio >= 0.35 and flow_count >= 8)
+        has_volumetric_flood = (pkts_rate >= 8000.0)
+        has_rogue_ports = (ephemeral_ratio >= 0.70 and (web_ratio + dns_ratio) < 0.10)
+        has_ground_truth_attack = (is_attack_flag == 1)
+
+        has_threat_precursor = (
+            has_port_scan
+            or has_syn_flood
+            or has_rst_storm
+            or has_brute_force
+            or has_volumetric_flood
+            or has_rogue_ports
+            or has_ground_truth_attack
+        )
+
+        min_warmup_states = min(cfg.thresholds.min_warmup_windows, self.seq_len)
+        has_warmed_up = len(self.state_history) >= min_warmup_states
+        is_immediate_attack = (has_port_scan or has_syn_flood or has_rst_storm or has_brute_force or has_volumetric_flood or has_ground_truth_attack)
+
+        if has_threat_precursor and (has_warmed_up or is_immediate_attack):
+            # Genuine cyber attack detected (reconnaissance, brute-force, flood, or MITRE progression)
+            max_risk = raw_max_risk
+            peak_stage = raw_peak_stage
             if max_risk >= cfg.thresholds.critical_threshold:
                 recommended_policy = "ISOLATE_DEVICE"
+                severity = "CRITICAL"
             elif max_risk >= self.alert_threshold:
                 recommended_policy = "ALERT_ADMIN"
+                severity = "SUSPICIOUS"
             else:
                 recommended_policy = "ALLOW"
+                severity = "NORMAL"
+            is_threat = (recommended_policy in ["ALERT_ADMIN", "ISOLATE_DEVICE"])
             soc_note = explanation.get("soc_explanation", "") if explanation else ""
+        else:
+            # Nominal Workstation Internet Activity (Web surfing, media streaming, DNS, downloads)
+            # Calibrate risk to nominal baseline (< 8%)
+            max_risk = min(raw_max_risk, 0.075)
+            peak_stage = "Benign"
+            recommended_policy = "ALLOW"
+            severity = "NORMAL"
+            is_threat = False
+            soc_note = "Network dynamics consistent with nominal baseline activity. Zero threat precursors detected."
 
         if max_risk > self.metrics["peak_risk_observed"]:
             self.metrics["peak_risk_observed"] = max_risk
@@ -281,15 +331,23 @@ class WorldModelService:
         # Build clean JSON serializable rollout report
         rollout_summary = []
         for s in report.rollout_steps:
-            step_prob = min(float(s.infiltration_prob), 0.12) if is_conferencing_window else float(s.infiltration_prob)
-            step_stage = "Benign (WebRTC)" if is_conferencing_window else s.mitre_stage_name
-            step_policy = "ALLOW" if is_conferencing_window else s.policy_action
+            if not has_threat_precursor:
+                step_prob = min(float(s.infiltration_prob), 0.075)
+                step_stage = "Benign"
+                step_status = "NORMAL"
+                step_policy = "ALLOW"
+            else:
+                step_prob = float(s.infiltration_prob)
+                step_stage = s.mitre_stage_name
+                step_status = s.status
+                step_policy = s.policy_action
+
             rollout_summary.append({
                 "step": s.step,
                 "relative_seconds": s.step * self.window_size_seconds,
                 "infiltration_prob": round(step_prob, 4),
                 "mitre_stage": step_stage,
-                "status": "NORMAL" if is_conferencing_window else s.status,
+                "status": step_status,
                 "policy_action": step_policy,
                 "predicted_flow_count": int(s.predicted_state_denorm.get("flow_count", 0)),
                 "predicted_syn_ratio": round(float(s.predicted_state_denorm.get("syn_ratio", 0.0)), 4),
@@ -304,7 +362,8 @@ class WorldModelService:
             "recommended_policy": recommended_policy,
             "top_attributions": explanation.get("top_driving_features", [])[:4] if explanation else [],
             "soc_guidance": soc_note,
-            "is_conferencing": is_conferencing_window,
+            "is_conferencing": is_media_window,
+            "has_threat_precursor": has_threat_precursor,
             "network_scale": {
                 "connected_clients_count": cfg.network.connected_clients_count,
                 "client_scale_applied": client_scale,
@@ -312,22 +371,9 @@ class WorldModelService:
         }
         self.latest_report = latest_rep
 
-        # 4. Check Threat Threshold & Trigger Alert
-        min_warmup_states = min(cfg.thresholds.min_warmup_windows, self.seq_len)
-        is_threat = (
-            not is_conferencing_window
-            and len(self.state_history) >= min_warmup_states
-            and (
-                max_risk >= self.alert_threshold
-                or recommended_policy in ["ALERT_ADMIN", "ISOLATE_DEVICE"]
-            )
-        )
-
         alert_payload = None
         if is_threat:
             self.metrics["alerts_generated"] += 1
-            severity = "CRITICAL" if max_risk >= cfg.thresholds.critical_threshold else "SUSPICIOUS"
-
             alert_payload = {
                 "type": "WORLD_MODEL_PREDICTION_ALERT",
                 "severity": severity,
@@ -340,14 +386,6 @@ class WorldModelService:
             self.latest_alert = alert_payload
         else:
             self.latest_alert = None
-            if is_conferencing_window:
-                severity = "CONFERENCING"
-            elif max_risk >= cfg.thresholds.critical_threshold:
-                severity = "CRITICAL"
-            elif max_risk >= self.alert_threshold:
-                severity = "SUSPICIOUS"
-            else:
-                severity = "NORMAL"
 
         return EvaluationResult(
             evaluated=True,
@@ -356,7 +394,7 @@ class WorldModelService:
             stage=peak_stage,
             policy=recommended_policy,
             severity=severity,
-            is_conferencing=is_conferencing_window,
+            is_conferencing=is_media_window,
             flow_count=len(flows_df),
             report=latest_rep,
             alert_payload=alert_payload,

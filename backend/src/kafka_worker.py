@@ -198,10 +198,10 @@ class KafkaFlowConsumerWorker:
         else:
             if eval_res.is_conferencing:
                 console.print(
-                    f"[bold cyan]🎥 [CONFERENCING MEDIA][/bold cyan] Evaluated Window | "
+                    f"[bold cyan]🎥 [MEDIA STREAMING / RTP][/bold cyan] Evaluated Window | "
                     f"Risk: [bold green]{eval_res.risk_pct:.1f}%[/bold green] | "
                     f"Stage: [cyan]{eval_res.stage}[/cyan] | "
-                    f"Policy: [bold green]ALLOW[/bold green] (Google Meet / STUN Normalization)"
+                    f"Policy: [bold green]ALLOW[/bold green] (Real-Time Media Baseline)"
                 )
             else:
                 history_len = len(self.world_model_service.state_history)

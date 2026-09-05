@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import json
+import uuid
 from pathlib import Path
 from typing import Optional, Dict, Any, Generator
 import pandas as pd
@@ -224,6 +225,11 @@ class DayTelemetryReplayer:
                                 record[k] = float(v)
                             except (ValueError, TypeError):
                                 pass
+
+                    record.setdefault("src_port", 0)
+                    record.setdefault("src_ip", "192.168.1.100")
+                    record.setdefault("dst_ip", "192.168.1.1")
+                    record.setdefault("event_id", f"ds-{uuid.uuid4().hex[:10]}")
 
                     producer.send(self.topic, value=record)
                     sent_count += 1
