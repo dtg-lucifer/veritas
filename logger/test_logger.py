@@ -42,7 +42,9 @@ class MockTcpLayer:
 
 class MockPacket:
     def __init__(self, src_ip="10.0.4.21", is_after_hours=True):
-        self.sniff_time = datetime.now(timezone.utc).replace(hour=23, minute=30) if is_after_hours else datetime.now(timezone.utc).replace(hour=11, minute=15)
+        # Use a fixed Wednesday (weekday=2) to test hours deterministically
+        base_date = datetime(2026, 9, 2, tzinfo=timezone.utc)
+        self.sniff_time = base_date.replace(hour=23, minute=30) if is_after_hours else base_date.replace(hour=11, minute=15)
         self.ip = MockIpLayer(src=src_ip)
         self.tcp = MockTcpLayer()
         self.http = MockHttpLayer()
@@ -66,7 +68,13 @@ def test_logger_parsing():
     assert event["file_extension"] == ".zip"
     assert event["size"] >= 45_000_000
     assert event["is_after_hours"] is True
-    console.print(f"[green]✓ Threat packet parsed successfully:[/green] User={event['user']} URL={event['url']} Type={event['event_type']} Size={event['size']:,.0f}B AfterHours={event['is_after_hours']}")
+    # Verify new 32-D flow schema fields
+    assert "protocol" in event and event["protocol"] == 6
+    assert "dst_port" in event and event["dst_port"] == 443
+    assert "flow_bytes_per_sec" in event
+    assert "syn_flag_cnt" in event
+    assert event["label"] == "Benign"
+    console.print(f"[green]✓ Threat packet parsed successfully:[/green] User={event['user']} URL={event['url']} Type={event['event_type']} Size={event['size']:,.0f}B Proto={event['protocol_name']}")
 
     # 2. Test Normal Packet
     normal_pkt = MockPacket(src_ip="10.0.1.15", is_after_hours=False)
@@ -81,6 +89,8 @@ def test_logger_parsing():
     assert norm_event["user"] == "EMP-NORM-01"
     assert norm_event["is_after_hours"] is False
     assert "github.com" in norm_event["url"]
+    assert norm_event["protocol"] == 6
+    assert norm_event["dst_port"] == 443
     console.print(f"[green]✓ Normal packet parsed successfully:[/green] User={norm_event['user']} URL={norm_event['url']} AfterHours={norm_event['is_after_hours']}")
 
     # 3. Test Redis Publisher Fallback & Batching

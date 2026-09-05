@@ -53,32 +53,32 @@
     {
       "model_name": "PyTorch Autoencoder (Deep Learning)",
       "threshold": 0.5,
-      "precision": 0.0149,
-      "recall": 0.2863,
-      "f1_score": 0.0283,
-      "roc_auc": 0.8721,
-      "pr_auc": 0.0135,
-      "false_positive_rate": 0.0569,
+      "precision": 0.0135,
+      "recall": 0.2832,
+      "f1_score": 0.0257,
+      "roc_auc": 0.8545,
+      "pr_auc": 0.0122,
+      "false_positive_rate": 0.0623,
       "confusion_matrix": {
-        "true_positives": 282,
-        "false_positives": 18660,
-        "true_negatives": 309455,
-        "false_negatives": 703
+        "true_positives": 279,
+        "false_positives": 20427,
+        "true_negatives": 307688,
+        "false_negatives": 706
       }
     },
     {
       "model_name": "Composite Risk Engine (Ensemble)",
       "threshold": 0.55,
-      "precision": 0.4197,
+      "precision": 0.4312,
       "recall": 0.9766,
-      "f1_score": 0.5871,
+      "f1_score": 0.5983,
       "roc_auc": 0.9991,
-      "pr_auc": 0.7161,
-      "false_positive_rate": 0.0041,
+      "pr_auc": 0.7178,
+      "false_positive_rate": 0.0039,
       "confusion_matrix": {
         "true_positives": 962,
-        "false_positives": 1330,
-        "true_negatives": 326785,
+        "false_positives": 1269,
+        "true_negatives": 326846,
         "false_negatives": 23
       }
     }

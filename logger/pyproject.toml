@@ -1,7 +1,7 @@
 [project]
 name = "logger"
 version = "0.1.0"
-description = "Pyshark Network Packet Sniffer & Redis Message Queue Producer for Internal Firewall"
+description = "Network Packet Logger, Dataset Replayer & Kafka Message Producer for Internal Firewall"
 readme = "README.md"
 authors = [
     { name = "dtg-lucifer", email = "piushbasu@gmail.com" }
@@ -9,8 +9,28 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "pyshark>=0.6",
+    "kafka-python-ng>=2.2.0",
+    "pandas>=2.2.0",
     "redis>=5.0.0",
     "rich>=13.7.0",
     "typer>=0.12.0",
     "pydantic>=2.8.0",
 ]
+
+[project.scripts]
+logger = "main:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "main.py",
+    "src",
+]
+
+

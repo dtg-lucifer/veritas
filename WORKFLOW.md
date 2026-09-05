@@ -1,261 +1,296 @@
-# Internal Network Adaptive Firewall: Technical Workflow & Architecture
+# Network World Model Cyber Defense: Technical Workflow & Architecture
 
 > **Smart India Hackathon (SIH 2026)**  
-> **Project Name:** *\<UNDECIDED\>*  
-> **Core Concept:** Decoupled Stream Ingestion → 5-Minute Behavioral Window Aggregation → Ensemble Machine Learning Inference → Composite Risk Scoring → Automated Policy Enforcement.
+> **Challenge:** AI Systems Capable of Learning Network Behaviour, Anticipating Attacker Progression & Proactive Cyber Defence Using World Models  
+> **Core Architecture:** Streaming Flow Ingestion $\to$ 15-Second State Window Aggregation $\to$ Attention-Augmented Recurrent World Model $\to$ $K$-Step Autoregressive Forward Simulation $\to$ MITRE ATT&CK Progression Mapping $\to$ Proactive Policy Enforcement.
 
 ---
 
 ## Executive Summary
 
-Traditional perimeter firewalls (North-South defenses) protect network boundaries from external intruders, but remain blind to **internal threat vectors** (East-West traffic, compromised employee credentials, privilege abuse, insider data exfiltration, and lateral movement). 
+Traditional perimeter intrusion detection systems (IDS) and firewalls treat network packets and flow records in isolation, mapping each static observation to a binary benign/malicious label. This discards the fundamental **temporal and causal structure** of cyber attacks:
+- The sequence in which reconnaissance port probes unfold.
+- The subtle TCP SYN flag distribution that precedes an exploit attempt.
+- The inter-arrival timing (IAT) of scanning packets before lateral movement and exfiltration begin.
 
-Our solution provides an **Adaptive Behavioral Internal Firewall** that does not inspect single packets in isolation, but instead constructs continuous **behavioral profiles** for every authenticated identity/device. 
+Our solution implements an **AI World Model for Proactive Cyber Defense**. Rather than classifying static snapshots, the World Model learns an internal simulation of how network environment states evolve over time:
 
-By decoupling heterogeneous log collection through a **high-throughput message broker**, buffering activity across **5-minute sliding/tumbling windows**, and running a **multi-model ensemble** to compute a **composite risk score**, the system detects subtle anomalies and automatically triggers **real-time defensive mitigations** (such as DNS sinkholing, device quarantine, session termination, or MFA challenge).
+$$P(S_{t+1} \mid S_{\le t})$$
+
+By observing continuous, 15-second aggregated network state vectors $S_t \in \mathbb{R}^{32}$, the model **simulates $K$ steps forward into the future**, anticipating infiltration probability trajectories and attack stage transitions before compromise is completed.
+
+---
+
+## In Simple Words: How the Pipeline Works
+
+1. **System Ingests Network Logs**: Continuously collects network packets and flow logs from the gateway or packet sniffers. It ignores all attack names or labels—it only inspects raw connection numbers.
+2. **Groups Traffic into 15-Second Snapshots**: Rather than looking at 1 packet at a time, it aggregates all flows over each 15-second period into a **32-number fingerprint** ($S_t$) representing connection count, port diversity, SYN/ACK ratios, byte rates, packet sizes, and inter-arrival times (IAT).
+3. **Watches the Recent Past (The Last 2 Minutes)**: Passes the last 8 snapshots ($8 \times 15\text{s} = 2\text{ minutes}$) through an attention-augmented recurrent neural network to understand network momentum and velocity.
+4. **Imagines the Immediate Future (World Model Simulation)**: Autoregressively forecasts the network's state for the next 15 seconds ($\hat{S}_{t+1}$), and loops that prediction back into itself to simulate **30s, 45s, 60s, and 75s ahead** ($K=5$ rollout steps).
+5. **Calculates Threat Risk & MITRE ATT&CK Phase**: For each future step, outputs an **Infiltration Probability (%)** and anticipated kill-chain phase (Reconnaissance, Initial Access, Lateral Movement, C2, Exfiltration).
+6. **Enforces Autonomous Policy Action**:
+   - **Risk < 40%**: Status `NORMAL` $\to$ Action: `ALLOW`.
+   - **40% ≤ Risk < 70%**: Status `SUSPICIOUS` $\to$ Action: `ALERT_ADMIN`.
+   - **Risk ≥ 70%**: Status `CRITICAL` $\to$ Action: `ISOLATE_DEVICE` (pre-emptively isolates host IP before breach completes).
+7. **Explains the Root Cause**: Outputs exact feature attributions (e.g. *25% packet burst, 16% byte rate, 12% SYN flood*) giving SOC teams instant actionable transparency.
 
 ---
 
 ## High-Level System Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Sources["1. Heterogeneous Log Sources"]
+flowchart LR
+    subgraph Col1["◀ COLUMN 1: INGESTION, STATE WINDOWING & WORLD MODEL"]
         direction TB
-        L1["Network & DNS Gateways"]
-        L2["VPN & Proxy Telemetry"]
-        L3["Endpoint & File Activity"]
+        
+        subgraph Sources["1. Heterogeneous Network Telemetry"]
+            direction TB
+            L1["NetFlow / IPFIX Flow Records"]
+            L2["PyShark / Scapy Packet Sniffers"]
+            L3["CSE-CIC-IDS2018 & CIC-IoT-2023"]
+        end
+
+        subgraph Broker["2. Decoupled Streaming Broker"]
+            Q[("Apache Kafka<br/>Topic: network_flows<br/>KRaft Mode (Port 9092)")]
+        end
+
+        subgraph Windowing["3. Temporal State Windowing"]
+            direction TB
+            W1["Stream Consumer Worker"]
+            W2["15-Second State Aggregator"]
+            W3["32-D State Vector S_t<br/>(Flow Rates, Flags, Ports, IAT)"]
+            W4["Context Window [S_t-W+1 ... S_t] (W=8)"]
+            W1 --> W2 --> W3 --> W4
+        end
+
+        subgraph WorldModel["4. Latent World Model Engine"]
+            direction TB
+            M1["State Latent Encoder (z_t in R^64)"]
+            M2["Recurrent Dynamics Core (LSTM)"]
+            M3["Temporal Multi-Head Attention"]
+            M4["Transition Dynamics Head: P(S_t+1 | S_<=t)"]
+            M1 --> M2 --> M3 --> M4
+        end
+
+        Sources -->|Raw Flows / Packets| Broker
+        Broker -->|Stream Consume| Windowing
+        W4 --> WorldModel
     end
 
-    subgraph Broker["2. High-Throughput Broker"]
-        Q["Redis Stream / Kafka Queue<br/>(Decoupled Ingestion)"]
-    end
-
-    subgraph Ingestion["3. Ingestion & Windowing"]
+    subgraph Col2["▶ COLUMN 2: FORWARD SIMULATION, XAI & DEFENSE"]
         direction TB
-        W1["Stream Consumer Worker"]
-        W2["5-Min Stateful Buffer (Per Identity)"]
-        W3["Behavioral Feature Extractor (23-D)"]
-        W1 --> W2 --> W3
+        
+        subgraph Simulation["5. K-Step Forward Simulation Engine"]
+            direction TB
+            S1["Autoregressive Rollout (k = 1 ... K)"]
+            S2["Projected States: [S_t+1 ... S_t+K]"]
+            S3["Infiltration Risk Timeline: [P_1 ... P_K]"]
+            S4["MITRE Stage: Recon → Infil → C2 → Exfil"]
+            S1 --> S2 & S3 & S4
+        end
+
+        subgraph Explainability["6. Explainable AI & Attribution"]
+            direction TB
+            X1["Temporal Attention Weights (Precursor Focus)"]
+            X2["Gradient × Input Feature Attribution"]
+            X3["Plain-English SOC Root Cause"]
+            X1 --> X3
+            X2 --> X3
+        end
+
+        subgraph Actions["7. Proactive Closed-Loop Mitigation"]
+            direction TB
+            P1["NORMAL (P < 40%): Allow & Learn"]
+            P2["SUSPICIOUS (40% <= P < 70%): Admin Alert"]
+            P3["CRITICAL (P >= 70%): Isolate Device"]
+            P4["Real-Time SOC Dashboard (WebSockets)"]
+            P1 & P2 & P3 --> P4
+        end
+
+        Simulation --> Explainability
+        Simulation --> Actions
+        Explainability -.-> P4
     end
 
-    subgraph Ensemble["4. Multi-Model Inference Ensemble"]
-        direction TB
-        M1["Statistical Baseline (Z-Scores)"]
-        M2["Isolation Forest (Outlier Tree)"]
-        M3["Deep Autoencoder (Reconstruction)"]
-        M4["LightGBM (Threat Classifier)"]
-    end
-
-    subgraph Fusion["5. Composite Risk Engine"]
-        R["Risk Fusion Formula<br/>(Score: 0 to 100)"]
-    end
-
-    subgraph Actions["6. Automated Policy Enforcement"]
-        direction TB
-        P1["Normal (Score &lt; 40): Allow &amp; Learn"]
-        P2["Suspicious (40 - 70): MFA / Admin Alert"]
-        P3["Critical (Score &gt; 70): Isolate Device"]
-        P4["Real-Time SOC Dashboard (WebSockets)"]
-    end
-
-    Sources -->|Raw Events| Broker
-    Broker --> Ingestion
-    W3 -->|Feature Vector| Ensemble
-    Ensemble --> Fusion
-    Fusion --> Actions
+    %% Cross-Column Causal Forward Dynamics Bridge
+    M4 ==>|Forward Simulation Rollout: Ŝ_t+1 & Latent z_t| S1
 ```
 
 ---
 
 ## Step-by-Step Technical Workflow
 
-### Step 1: Heterogeneous Log Generation & Ingestion
-Independent network agents and infrastructure services continuously stream raw telemetry without needing custom synchronization:
-- **DNS Gateways & Proxy Logs:** Domain queries, external/internal destination IPs, HTTP methods, status codes, bytes uploaded/downloaded.
-- **Endpoint / Device Services:** Removable media connections (USB insertions), local file copy/deletion events, process executions.
-- **Identity & Authentication:** LDAP logons, after-hours access timestamps, privilege escalation attempts.
+### Step 1: Telemetry Collection & Normalization
+Network probes, gateway sensors, or packet sniffers (PyShark/Scapy) capture raw traffic and extract flow-level and packet-level metadata:
+- **Flow-Level Attributes (NetFlow / IPFIX format):** Source/destination IP and port pairs, TCP flag bitmask (SYN, ACK, FIN, RST, PSH, URG), protocol, byte counts, packet counts, duration, and inter-arrival time (IAT) statistics.
+- **Packet-Level Attributes (PCAP-derived):** Time-To-Live (TTL), TCP window size, fragment flags, payload size distribution, and port access patterns.
 
-Each independent service packages its event into a standardized JSON payload and pushes it asynchronously to the broker using non-blocking I/O.
+Each event is serialized into a standard JSON schema and streamed asynchronously into the message broker.
 
-```json
-{
-  "event_id": "evt-88492-af",
-  "timestamp": "2026-08-19T02:14:32Z",
-  "user": "EMP-0419",
-  "src_ip": "10.0.4.52",
-  "dst_ip": "198.51.100.4",
-  "event_type": "file_copy",
-  "details": {
-    "file_name": "financial_records_q3.zip",
-    "file_size_bytes": 45280000,
-    "destination": "removable_usb"
-  }
-}
+---
+
+### Step 2: Decoupled High-Throughput Streaming Broker (Apache Kafka)
+The ingestion pipeline is decoupled from model computation via a high-throughput **Apache Kafka Message Broker** (`network_flows` topic):
+- **Zero Ingestion Latency:** Line-rate packet and flow record ingestion without backpressure.
+- **Partitioned Scalability:** 3 partitions in KRaft mode (no Zookeeper overhead, zero password).
+- **Asynchronous Consumer Groups:** Backend workers (`firewall_world_model_group`) consume and buffer flow records asynchronously.
+- **Observability:** Kafka Web UI (`http://localhost:8081`) for live topic inspection and consumer group lag monitoring.
+- **Direct REST Alternative:** Direct HTTP flow ingestion endpoint (`POST /api/v1/logs/ingest`) also available for standalone testing.
+
+---
+
+### Step 3: 15-Second Temporal State Window Aggregation ($S_t \in \mathbb{R}^{32}$)
+Single flows lack sufficient context to determine attack progression. The `StateWindowAggregator` accumulates flows across **15-second uniform time windows**, computing a dense 32-dimensional Network State Vector $S_t$:
+
+| Category | Vector Features | Security Significance |
+| :--- | :--- | :--- |
+| **Volumetric Dynamics** | `flow_count`, `tot_fwd_pkts`, `tot_bwd_pkts`, `tot_fwd_bytes`, `tot_bwd_bytes`, `flow_bytes_rate`, `flow_pkts_rate`, `flow_duration_mean` | Detects volumetric flooding, sudden exfiltration bursts, and bandwidth spikes. |
+| **TCP Flag Bitmasks** | `syn_flag_count`, `syn_ratio`, `ack_flag_count`, `ack_ratio`, `rst_flag_count`, `fin_flag_count`, `psh_flag_count`, `urg_flag_count` | Identifies SYN floods, half-open port scans, teardown anomalies, and push floods. |
+| **Port & Protocol Diversity** | `unique_dst_ports`, `ephemeral_port_ratio` ($\ge 1024$), `web_port_ratio` (80/443), `dns_port_ratio` (53), `ssh_ftp_port_ratio` (21/22), `tcp_protocol_ratio`, `udp_protocol_ratio` | Signals reconnaissance scans, lateral RPC probing, unauthorized protocol abuse. |
+| **Timing & Packet Stats** | `pkt_len_mean`, `pkt_len_std`, `flow_iat_mean`, `flow_iat_std`, `flow_iat_max`, `down_up_ratio_mean` | Exposes stealthy low-and-slow port scans and tunneling payloads. |
+| **Session Control** | `init_fwd_win_mean`, `active_duration_mean`, `idle_duration_mean` | Captures TCP window manipulation and anomalous beaconing duty cycles. |
+
+---
+
+### Step 4: Attention-Augmented Recurrent World Model
+The World Model processes a sliding history trajectory of $W=8$ states: $[S_{t-W+1}, \dots, S_t]$:
+1. **State Encoder:** Projects raw $S_t \in \mathbb{R}^{32}$ into latent representation $z_t \in \mathbb{R}^{64}$ with LayerNorm and LeakyReLU activations.
+2. **Recurrent Dynamics Core (LSTM):** Models causal temporal transitions $h_t = \text{LSTM}(z_t, h_{t-1})$.
+3. **Temporal Multi-Head Attention:** Attends over historical time steps to capture long-range temporal dependencies and produce explainable attention weights.
+4. **Transition Dynamics Head:** Predicts the next physical network state: $\hat{S}_{t+1} = \text{MLP}(h_t)$.
+5. **Composite Multi-Task Loss:**
+   $$\mathcal{L} = \mathcal{L}_{\text{dynamics}} + 1.5 \mathcal{L}_{\text{infiltration}} + 1.0 \mathcal{L}_{\text{stage}}$$
+
+---
+
+### Step 5: $K$-Step Autoregressive Forward Simulation
+Unlike static classifiers that only react *after* an attack has arrived, the World Model forward-simulates future environment states:
+
+$$\begin{aligned}
+\hat{S}_{t+1} &= \text{WorldModel}(S_{t-W+1}, \dots, S_t) \\
+\hat{S}_{t+2} &= \text{WorldModel}(S_{t-W+2}, \dots, \hat{S}_{t+1}) \\
+&\ \ \vdots \\
+\hat{S}_{t+K} &= \text{WorldModel}(\dots, \hat{S}_{t+K-1})
+\end{aligned}$$
+
+At each future rollout step $t+k$, the engine predicts:
+- **Infiltration Probability ($P_k$):** Projected threat trajectory $[P_1, P_2, \dots, P_K]$.
+- **Convergence Step:** Exact future time step where probability crosses the critical threshold.
+- **Projected Network Telemetry:** Expected flow counts, SYN ratios, and byte rates under attack conditions.
+
+---
+
+### Step 6: MITRE ATT&CK Tactical Progression Mapping
+The World Model maps evolving network dynamics directly to canonical MITRE ATT&CK stages:
+
+```
+[ Benign Operational Baseline ]
+              │
+              ▼ (Probing, SYN scans, high unique ports)
+     [ 1. Reconnaissance ] ────► T1046 (Network Service Scanning), T1595 (Active Scanning)
+              │
+              ▼ (Brute force, credential spraying, web exploits)
+     [ 2. Initial Access ] ────► T1190 (Exploit Public-Facing App), T1110 (Brute Force)
+              │
+              ▼ (Internal exploitation, SMB/RDP pivot, privilege escalation)
+ [ 3. Infiltration / Lateral ] ─► T1210 (Exploitation of Remote Services), T1021 (Remote Services)
+              │
+              ▼ (ARES bot check-in, periodic beaconing, reverse shells)
+   [ 4. Command & Control ] ───► T1071 (Application Layer Protocol), T1573 (Encrypted Channel)
+              │
+              ▼ (High outbound data burst or DoS disruption)
+ [ 5. Exfiltration / Impact ] ─► T1048 (Exfiltration Over Alt Protocol), T1499 (Endpoint DoS)
 ```
 
 ---
 
-### Step 2: Decoupled Message Broker Buffering
-Log ingestion is completely decoupled from machine learning computation via a **Message Broker / Stream Queue** (e.g., Redis Streams / Redis Queue / Apache Kafka):
-- **Zero Backpressure on Gateways:** Network gateways publish logs at line speed without waiting for ML models.
-- **Fault-Tolerant Queueing:** Events persist even during temporary backend spikes or model inference latency.
-- **Horizontal Consumer Scaling:** Multiple backend workers consume from the queue using consumer groups.
+### Step 7: Explainable AI & Driving Feature Attribution
+For every prediction, the system eliminates black-box obscurity:
+- **Temporal Attention Distribution:** Highlights which past time window triggered the forecast.
+- **Gradient $\times$ Input Attribution:** Measures each feature's contribution:
+  $$\text{Attribution}_j = \left| S_{t, j} \times \frac{\partial P_{\text{inf}}}{\partial S_{t, j}} \right|$$
+- **SOC Analyst Translation:** Generates plain-English explanations (e.g. *"[CRITICAL] Forward dynamics forecast threat escalation driven by: abnormal SYN packet concentration (42% attribution); rapid multi-port scanning activity across 318 distinct ports"*).
 
 ---
 
-### Step 3: 5-Minute Window Stateful Aggregation
-Evaluating raw individual log lines with complex deep learning models is both computationally prohibitive and context-blind (e.g., a single DNS request is not malicious, but 2,000 queries in 5 minutes at 2:00 AM is).
-
-The backend maintains a **Stateful Sliding / Tumbling Window** (default: **5 minutes**, configurable):
-1. **Entity Partitioning:** Incoming events are hashed and routed to their respective `user_id` / `src_ip` window state.
-2. **Time-Series Accumulation:** Events within $[t, t + 5\text{ min}]$ are held in an in-memory state store.
-3. **Window Expiry & Trigger:** When the 5-minute window closes (or on sliding step intervals), the accumulated raw logs are converted into an aggregated **Behavioral Feature Vector**.
-
-```
-Time ──► | [Log 1] [Log 2] ... [Log N] | ──► Trigger Aggregation ──► Feature Vector
-         |<─────── 5 Minutes ─────────>|
-```
-
----
-
-### Step 4: Behavioral Feature Engineering & Vectorization
-The window aggregator condenses hundreds of individual log entries into a compact, numerical **23+ dimensional behavioral vector**:
-
-| Category | Extracted Feature Dimensions |
-| :--- | :--- |
-| **Volumetric Metrics** | `bytes_sent_total`, `bytes_received_total`, `file_bytes_copied`, `email_attachments_size` |
-| **Frequency & Rates** | `http_request_rate_per_sec`, `dns_query_count`, `failed_logins_count`, `file_access_count` |
-| **Diversity & Entropy** | `unique_domains_accessed`, `new_unseen_domains_count`, `unique_destinations_count` |
-| **Temporal Context** | `is_after_hours` (0/1), `hour_of_day`, `day_of_week`, `session_duration_minutes` |
-| **Protocol Distribution** | `ssh_connection_ratio`, `https_vs_http_ratio`, `external_vs_internal_traffic_ratio` |
-| **Physical & Peripheral** | `usb_insertions_count`, `sensitive_extension_access` (.zip, .exe, .tar, .pem) |
-
----
-
-### Step 5: Ensemble Machine Learning Behavioral Prediction
-Because deep ML models can have higher inference latency, our architecture employs a **Tiered & Ensemble Inference Pipeline**:
-
-```mermaid
-flowchart TD
-    V["Aggregated Feature Vector (X)"]
-    
-    subgraph Tiers["Inference Ensemble"]
-        direction TB
-        M1["Statistical Baseline (Z-Score &lt; 0.1ms)"]
-        M2["Isolation Forest (Outlier Trees)"]
-        M3["Deep Autoencoder (Reconstruction Loss)"]
-    end
-    
-    F["Composite Risk Engine (0 - 100)"]
-    
-    V --> Tiers
-    Tiers --> F
-```
-
-1. **Statistical User Baseline Engine ($S_{\text{base}}$):**
-   - Tracks running historical mean ($\mu_u$) and variance ($\sigma_u$) for each user identity.
-   - Computes multi-feature Z-scores: $Z_{u, f} = \frac{x_{u, f} - \mu_{u, f}}{\sigma_{u, f} + \epsilon}$.
-   - Provides sub-millisecond immediate scoring and human-readable explanations (e.g., `+450% USB transfer, 5.2σ above baseline`).
-
-2. **Isolation Forest Tree Ensemble ($S_{\text{if}}$):**
-   - Partitions multidimensional feature space to isolate rare, anomalous combinations.
-   - Robust to outliers with normalized $[0, 1]$ anomaly probability.
-
-3. **Deep PyTorch Autoencoder ($S_{\text{ae}}$):**
-   - Symmetrical deep neural network ($D \to 64 \to 32 \to 16 \to 32 \to 64 \to D$) trained on legitimate baseline behavior.
-   - Computes reconstruction loss: $\mathcal{L}_{\text{MSE}} = \frac{1}{D} \sum_{i=1}^D (x_i - \hat{x}_i)^2$. High loss signifies novel, complex threat patterns.
-
-4. **LightGBM Supervised Classifier ($S_{\text{gb}}$):**
-   - High-speed gradient boosting model trained on known attack patterns (CERT insider threat benchmark).
-
----
-
-### Step 6: Composite Risk Scoring & Dynamic Fusion
-The individual model outputs are synthesized by the **Composite Risk Engine** into a single normalized **Risk Score ($0 - 100$)**:
-
-$$\text{Composite Risk} = 100 \times \left( w_1 S_{\text{gb}} + w_2 S_{\text{base}} + w_3 S_{\text{if}} + w_4 S_{\text{ae}} \right)$$
-
-Where $\sum w_i = 1.0$ (e.g., $w_1 = 0.40, w_2 = 0.25, w_3 = 0.20, w_4 = 0.15$).
-
----
-
-### Step 7: Automated Policy Enforcement & Mitigation Matrix
-Based on the composite score, the system automatically selects and enforces security policies without waiting for human intervention:
+### Step 8: Proactive Closed-Loop Policy Mitigation Matrix
 
 ```mermaid
 stateDiagram-v2
-    [*] --> WindowAggregated: 5-Minute Window Buffer
-    WindowAggregated --> RiskEvaluated: Ensemble Inference
+    [*] --> HistoricalTrajectory: 15s State Windows (W=8)
+    HistoricalTrajectory --> ForwardSimulation: Autoregressive Rollout (K=5)
     
-    RiskEvaluated --> NormalState: Risk < 40
-    RiskEvaluated --> SuspiciousState: 40 <= Risk < 70
-    RiskEvaluated --> CriticalState: Risk >= 70
+    ForwardSimulation --> NormalState: Max P < 40%
+    ForwardSimulation --> SuspiciousState: 40% <= Max P < 70%
+    ForwardSimulation --> CriticalState: Max P >= 70%
     
     state NormalState {
-        ALLOW: Allow Network Traffic
-        UPDATE: Update Running Baseline Parameters
+        ALLOW: Forward Traffic Normally
+        UPDATE: Update Continual Baseline Normalization
     }
     
     state SuspiciousState {
-        MFA: Trigger Step-Up 2FA / SSO Prompt
-        DNS_FILTER: Enforce Strict DNS Inspection
         ALERT: Broadcast SOC Warning via WebSockets
+        DPI: Escalate to Deep Packet Inspection
+        THROTTLE: Rate-Limit Suspect Identity / Egress
     }
     
     state CriticalState {
-        ISOLATE: Isolate Device (iptables / Firewall)
-        REVOKE: Revoke Active VPN and LDAP Session
-        INCIDENT: Create High-Priority Incident Record
+        PRE_EMPTIVE_ISOLATE: Isolate Device Before Kill Chain Completes
+        DROP: Inject iptables Gateway Drop Rules
+        REVOKE: Terminate Active Sessions & Access Tokens
     }
 ```
 
-| Risk Level | Score Range | Classification | Triggered Action |
-| :--- | :--- | :--- | :--- |
-| **Level 1** | $0 \le \text{Risk} < 40$ | **NORMAL** | **ALLOW:** Pass traffic; quietly update historical baseline parameters. |
-| **Level 2** | $40 \le \text{Risk} < 70$ | **SUSPICIOUS** | **MONITOR & CHALLENGE:** Trigger step-up authentication (MFA); restrict access to tier-1 sensitive databases; alert SOC analysts via WebSockets. |
-| **Level 3** | $70 \le \text{Risk} \le 100$ | **CRITICAL** | **AUTOMATED MITIGATION:** Instant device network isolation (`ISOLATE_DEVICE`); drop active VPN connection; block egress IP at gateway; revoke access tokens. |
+| Security Status | Forecasted Infiltration Prob | Tactical Mitigation Action |
+| :--- | :---: | :--- |
+| **NORMAL** | $0 \le P < 40\%$ | **ALLOW:** Pass traffic; update running normal baseline parameters. |
+| **SUSPICIOUS** | $40\% \le P < 70\%$ | **ALERT_ADMIN:** Broadcast WebSocket alert; escalate to full packet capture; rate-limit suspect host. |
+| **CRITICAL** | $70\% \le P \le 100\%$ | **ISOLATE_DEVICE:** Pre-emptively isolate host IP via iptables; drop active connections *before* lateral compromise concludes. |
 
 ---
 
-## Key Advantages for SIH 2026 Presentation
+## Key Technical Advantages for SIH 2026 Evaluation
 
-| # | Key Advantage | Technical Explanation |
-| :-: | :--- | :--- |
-| **1** | **Identity-Centric Baselines** | Learns behavioral patterns per user/role rather than relying on static IP addresses or rigid signature rules. |
-| **2** | **Asynchronous Stream Scaling** | Message Broker decouples log collection from heavy computation; effortlessly handles 10,000+ logs/sec with sub-millisecond queuing. |
-| **3** | **5-Minute Aggregation Window** | Eliminates single-packet false positives; provides necessary time context to capture stealthy exfiltration, scans, and lateral movement. |
-| **4** | **Ensemble Reliability** | Zero Single Point of Failure in ML: statistical models provide instant baseline scoring while deep learning detects novel, non-linear anomalies. |
-| **5** | **Automated Closed-Loop Action** | Moves beyond passive SIEM alerting by directly executing network-level isolation, DNS filtering, and credential revocation. |
+| # | Feature | Static IDS / Baseline | AI World Model (Our Solution) |
+| :-: | :--- | :--- | :--- |
+| **1** | **Temporal Causality** | Treats packets/flows in isolation. | Models sequential transitions $P(S_{t+1} \mid S_{\le t})$ across sliding history. |
+| **2** | **Proactive Lead Time** | Alerts only *after* damage occurs ($t=0$). | Simulates $K$ steps ahead; alerts **$K$ windows in advance** ($t+K$). |
+| **3** | **Kill Chain Anticipation** | Blind to attack progression. | Anticipates MITRE ATT&CK trajectory from Reconnaissance to Infiltration. |
+| **4** | **Explainability** | Black-box output. | Temporal attention heatmaps + gradient feature attributions. |
+| **5** | **Offline Capability** | Often relies on cloud threat feeds. | Runs fully offline with zero cloud API dependencies. |
 
 ---
 
 ## Presentation Slide Breakdown (For Hackathon Pitch)
 
-* **Slide 1: The Problem** — Perimeter firewalls fail against insider threats, compromised employee credentials, and stealthy lateral data theft.
-* **Slide 2: Our Solution** — An AI-powered adaptive internal firewall utilizing message brokers, 5-minute behavioral windowing, and multi-model ensemble detection.
-* **Slide 3: End-to-End Pipeline** — Independent log producers $\to$ Redis/Kafka queue $\to$ 5-minute window feature aggregator $\to$ Ensemble ML inference $\to$ Action gateway.
-* **Slide 4: Behavioral Feature Vectors** — How thousands of raw DNS, proxy, EDR, and file events transform into 23 distinct behavioral signals.
-* **Slide 5: Multi-Model Ensemble** — Combining fast statistical Z-score baselines, Isolation Forests, and Deep Autoencoders for explainable and robust risk scoring.
-* **Slide 6: Automated Mitigation Demo** — Live demonstration showing an simulated insider attack being detected in the 5-minute window and instantly isolated at the gateway.
+* **Slide 1: The Problem** — Static IDS classifiers fail against stealthy multi-stage infiltrations because they inspect flows in isolation, ignoring temporal causality.
+* **Slide 2: The Solution** — An AI World Model that learns network transition dynamics $P(S_{t+1} \mid S_{\le t})$ and simulates future attacker trajectories.
+* **Slide 3: End-to-End Pipeline** — Streaming flows $\to$ 15s state window aggregation $\to$ Attention-augmented recurrent World Model $\to$ $K$-step rollout $\to$ Automated defense.
+* **Slide 4: 32-D Network State Vector** — Condensing flow rates, TCP flags, port scanning distributions, and packet timing into structured physics.
+* **Slide 5: $K$-Step Forward Simulation** — How forward simulation predicts infiltration probability and MITRE stages $K$ steps ahead of compromise.
+* **Slide 6: Benchmark & Explainability Demo** — Live demonstration showing measurable uplift over Logistic Regression and real-time feature attributions.
 
 ---
 
-## Verification & Demo Commands
+## Verification & Interactive Demo Commands
 
-To run and verify this complete architecture locally:
+For the full command cheatsheet across all modules, refer to [`COMMANDS.md`](file:///home/piush/Prog/hackathons/internal-firewall-sih-2026/COMMANDS.md).
 
 ```bash
-# 1. Start Message Broker & Backend Services
-docker compose up -d
+# 1. Train World Model & Run Comparative Benchmark
+cd ml
+uv run python train.py --sample-frac 0.15 --epochs 12 --window-size 15 --seq-len 8
 
-# 2. Run the Real-Time Traffic & Threat Simulator
-cd simulator
-uv run python simulate.py --scenario wikileaks --target redis
+# 2. Run Interactive Forward Simulation Rollout Demo (Terminal View)
+uv run python demo.py --file data/external-network/cic-ids-2018/Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv --rollout-steps 5
 
-# 3. Observe Real-Time Model Inference & Alerts
-# Inspect backend logs or open the Web GUI / WebSocket stream:
-# API Docs: http://localhost:8000/docs
-# Redis UI: http://localhost:8081
+# 3. Export Forward Simulation Report to Markdown or Plain Text
+uv run python demo.py --file data/external-network/cic-ids-2018/Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv \
+  --rollout-steps 5 \
+  --output reports/demo_thursday_infiltration.md
+
+# 4. Evaluate Specific Threat Scenarios (Attack Progression vs. Benign Baseline)
+uv run python demo.py --file data/external-network/cic-ids-2018/Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv --scenario attack
+uv run python demo.py --file data/external-network/cic-ids-2018/Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv --scenario benign
 ```
-
