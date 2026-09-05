@@ -89,7 +89,7 @@ class StateWindowAggregator:
         ]
         for col in num_cols:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+                df[col] = pd.to_numeric(df[col], errors="coerce").replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
         # Precompute port and protocol masks for vectorized aggregation
         df["is_ephemeral"] = (df["dst_port"] >= 1024).astype(float)

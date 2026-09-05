@@ -195,18 +195,23 @@ class DayTelemetryReplayer:
                 if "dst_port" in chunk.columns:
                     chunk = chunk[chunk["dst_port"] != "Dst Port"]
 
-                # If monday, default to pure benign baseline
-                if day_key == "monday" and "label" in chunk.columns:
-                    chunk = chunk[chunk["label"].str.lower() == "benign"]
+                # If benign target, default to pure benign baseline
+                if day_key in ["monday", "benign", "baseline", "normal"] and "label" in chunk.columns:
+                    chunk = chunk[chunk["label"].astype(str).str.lower() == "benign"]
 
                 # Apply scenario filter if specified
                 if scenario == "attack" and "label" in chunk.columns:
-                    chunk = chunk[chunk["label"].str.lower() != "benign"]
+                    chunk = chunk[chunk["label"].astype(str).str.lower() != "benign"]
                 elif scenario == "benign" and "label" in chunk.columns:
-                    chunk = chunk[chunk["label"].str.lower() == "benign"]
+                    chunk = chunk[chunk["label"].astype(str).str.lower() == "benign"]
 
                 if chunk.empty:
                     continue
+
+                # Ensure flows within the chunk are sorted chronologically
+                if "timestamp" in chunk.columns:
+                    chunk["_dt_sort"] = pd.to_datetime(chunk["timestamp"], format="mixed", dayfirst=True, errors="coerce")
+                    chunk = chunk.sort_values(by="_dt_sort").drop(columns=["_dt_sort"]).reset_index(drop=True)
 
                 for _, row in chunk.iterrows():
                     record = row.to_dict()

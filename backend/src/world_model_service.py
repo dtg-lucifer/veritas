@@ -100,21 +100,22 @@ class WorldModelService:
 
     def ingest_batch(self, flows: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
-        Buffers a batch of incoming flows and runs evaluation if window threshold is reached.
+        Buffers a batch of incoming flows and runs evaluation when window boundaries complete.
         Returns an alert payload dictionary if threat threshold is breached.
         """
         for f in flows:
             self.ingest_flow(f)
 
-        # Evaluate if we have collected enough flows or crossed a time boundary
-        if len(self.flow_buffer) >= 20:
-            return self.process_pending_flows()
+        # Evaluate when flows cross window boundaries or buffer exceeds 25 flows
+        if len(self.flow_buffer) >= 25:
+            return self.process_pending_flows(flush_all=False)
         return None
 
-    def process_pending_flows(self) -> Optional[Dict[str, Any]]:
+    def process_pending_flows(self, flush_all: bool = False) -> Optional[Dict[str, Any]]:
         """
         Aggregates pending flows into 32-dim State Vectors, updates history,
         and performs K-step autoregressive forward simulation.
+        If flush_all is False, retains the latest active window until flows cross to a new window.
         """
         if not self.flow_buffer:
             return None
@@ -122,10 +123,7 @@ class WorldModelService:
         if self.simulator is None:
             return None
 
-        flows_to_process = list(self.flow_buffer)
-        self.flow_buffer.clear()
-
-        df_flows = pd.DataFrame(flows_to_process)
+        df_flows = pd.DataFrame(self.flow_buffer)
         if df_flows.empty:
             return None
 
@@ -134,10 +132,38 @@ class WorldModelService:
             if col not in ["timestamp", "label"]:
                 df_flows[col] = pd.to_numeric(df_flows[col], errors="coerce").fillna(0.0)
 
+        # Parse window timestamp
+        if "timestamp" in df_flows.columns:
+            df_flows["window_timestamp"] = pd.to_datetime(
+                df_flows["timestamp"], format="mixed", dayfirst=True, errors="coerce"
+            ).dt.floor(f"{self.window_size_seconds}s")
+        else:
+            df_flows["window_timestamp"] = pd.Timestamp.now(timezone.utc).floor(f"{self.window_size_seconds}s")
+
+        unique_windows = df_flows["window_timestamp"].dropna().sort_values().unique()
+
+        # If not flushing all and we haven't crossed to a subsequent window yet, hold until window boundary is reached
+        if not flush_all and len(unique_windows) <= 1:
+            return None
+
+        if flush_all or len(unique_windows) <= 1:
+            flows_df = df_flows
+            self.flow_buffer.clear()
+        else:
+            active_window = unique_windows[-1]
+            active_mask = (df_flows["window_timestamp"] == active_window)
+            # Keep active window flows in buffer
+            self.flow_buffer = [f for f, m in zip(self.flow_buffer, active_mask) if m]
+            flows_df = df_flows[~active_mask]
+
         # Aggregate flows into temporal windows
-        df_states = self.aggregator.aggregate_flows_to_states(df_flows)
+        df_states = self.aggregator.aggregate_flows_to_states(flows_df)
         if df_states.empty:
             return None
+
+        # Filter out isolated micro-fragments (< 3 flows) when more substantial windows exist in batch
+        if len(df_states) > 1 and (df_states["flow_count"] >= 3).any():
+            df_states = df_states[df_states["flow_count"] >= 3].reset_index(drop=True)
 
         self.metrics["windows_evaluated"] += len(df_states)
 
@@ -209,9 +235,14 @@ class WorldModelService:
         self.latest_report = latest_rep
 
         # 4. Check Threat Threshold & Trigger Alert
+        # Require at least 4 temporal states (1 minute) to establish trajectory physics and avoid cold-start padding artifacts
+        min_warmup_states = min(4, self.seq_len)
         is_threat = (
-            max_risk >= self.alert_threshold
-            or recommended_policy in ["ALERT_ADMIN", "ISOLATE_DEVICE"]
+            len(self.state_history) >= min_warmup_states
+            and (
+                max_risk >= self.alert_threshold
+                or recommended_policy in ["ALERT_ADMIN", "ISOLATE_DEVICE"]
+            )
         )
 
         if is_threat:

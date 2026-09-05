@@ -108,8 +108,7 @@ class KafkaFlowConsumerWorker:
                 if len(batch) >= batch_size:
                     alert = self.world_model_service.ingest_batch(batch)
                     batch.clear()
-                    if alert:
-                        await self._dispatch_alert(alert)
+                    await self._handle_evaluation(alert)
 
         except asyncio.CancelledError:
             pass
@@ -119,8 +118,7 @@ class KafkaFlowConsumerWorker:
             # Flush remaining batch on exit
             if batch:
                 alert = self.world_model_service.ingest_batch(batch)
-                if alert:
-                    await self._dispatch_alert(alert)
+                await self._handle_evaluation(alert)
 
     async def _periodic_flush_loop(self):
         """Timer task ensuring buffered flows are evaluated even during slow arrival rates."""
@@ -128,13 +126,35 @@ class KafkaFlowConsumerWorker:
             try:
                 await asyncio.sleep(FLUSH_INTERVAL_SECONDS)
                 if self.world_model_service.flow_buffer:
-                    alert = self.world_model_service.process_pending_flows()
-                    if alert:
-                        await self._dispatch_alert(alert)
+                    alert = self.world_model_service.process_pending_flows(flush_all=True)
+                    await self._handle_evaluation(alert)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 console.print(f"[yellow]Warning in periodic flush loop: {e}[/yellow]")
+
+    async def _handle_evaluation(self, alert: Optional[Dict[str, Any]]):
+        """Dispatches an alert if threat detected, or prints normal evaluation status."""
+        if alert:
+            await self._dispatch_alert(alert)
+        else:
+            latest = self.world_model_service.latest_report
+            if latest:
+                risk = latest.get("max_infiltration_prob", 0.0) * 100
+                stage = latest.get("peak_stage", "Benign")
+                policy = latest.get("recommended_policy", "ALLOW")
+                history_len = len(self.world_model_service.state_history)
+                min_warmup = min(4, self.world_model_service.seq_len)
+                if history_len < min_warmup:
+                    console.print(
+                        f"[bold cyan]⏳ [WARM-UP {history_len}/{min_warmup}][/bold cyan] Buffering Temporal Sequence | "
+                        f"Risk: [cyan]{risk:.1f}%[/cyan] | Stage: [cyan]{stage}[/cyan] | Policy: [bold green]ALLOW[/bold green]"
+                    )
+                else:
+                    console.print(
+                        f"[bold green]🟢 [NORMAL TRAFFIC][/bold green] Evaluated Window | Risk: [bold green]{risk:.1f}%[/bold green] "
+                        f"| Stage: [cyan]{stage}[/cyan] | Policy: [bold green]{policy}[/bold green]"
+                    )
 
     async def _dispatch_alert(self, alert: Dict[str, Any]):
         """Dispatches an alert to WebSocket clients and internal alert log."""
