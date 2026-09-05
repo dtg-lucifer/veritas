@@ -34,7 +34,16 @@ services:
       - kafka
     restart: unless-stopped
 
-  # 3. AI World Model Backend & WebSocket Hub
+  # 3. Redis In-Memory Store (Real-time telemetry & fault-tolerant parsing metrics)
+  redis:
+    image: redis:7.2-alpine
+    container_name: firewall_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --save "" --appendonly no
+    restart: unless-stopped
+
+  # 4. AI World Model Backend & WebSocket Hub
   backend:
     build:
       context: .
@@ -45,8 +54,10 @@ services:
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - KAFKA_TOPIC=network_flows
+      - REDIS_URL=redis://redis:6379/0
       - ALERT_THRESHOLD=40.0
       - WINDOW_SECONDS=15
     depends_on:
       - kafka
+      - redis
     restart: unless-stopped

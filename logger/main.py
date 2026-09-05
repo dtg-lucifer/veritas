@@ -180,7 +180,8 @@ def sniff(
     sniffer = NetworkSniffer(
         interface=interface,
         bpf_filter=bpf,
-        redis_url=None,
+        kafka_bootstrap_servers=kafka_server,
+        kafka_topic=topic,
         default_user=default_user,
     )
     # Stream live packets
@@ -214,7 +215,8 @@ def pcap(
     ))
     sniffer = NetworkSniffer(
         pcap_file=file_path,
-        redis_url=None,
+        kafka_bootstrap_servers=kafka_server,
+        kafka_topic=topic,
         default_user=default_user,
     )
     sniffer.process_pcap_file(file_path)

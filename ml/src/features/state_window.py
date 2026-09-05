@@ -79,7 +79,7 @@ class StateWindowAggregator:
         # Floor timestamp to window interval
         df["window_timestamp"] = df["timestamp"].dt.floor(f"{self.window_size_seconds}s")
 
-        # Ensure all numeric columns are coerced and valid
+        # Ensure all numeric columns are coerced and valid (initialize missing columns with 0.0)
         num_cols = [
             "dst_port", "protocol", "tot_fwd_pkts", "tot_bwd_pkts", "tot_fwd_bytes", "tot_bwd_bytes",
             "flow_bytes_per_sec", "flow_pkts_per_sec", "flow_duration", "syn_flag_cnt", "ack_flag_cnt",
@@ -90,9 +90,15 @@ class StateWindowAggregator:
         for col in num_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce").replace([np.inf, -np.inf], 0.0).fillna(0.0)
+            else:
+                df[col] = 0.0
+
+        if "label" not in df.columns:
+            df["label"] = "Benign"
 
         # Precompute port and protocol masks for vectorized aggregation
-        df["is_ephemeral"] = (df["dst_port"] >= 1024).astype(float)
+        # Exclude recognized service ports (STUN/TURN 3478, HTTP alt 8080, 8443) from ephemeral mask
+        df["is_ephemeral"] = ((df["dst_port"] >= 1024) & (~df["dst_port"].isin([3478, 8080, 8443]))).astype(float)
         df["is_web"] = df["dst_port"].isin([80, 443, 8080]).astype(float)
         df["is_dns"] = (df["dst_port"].astype(float) == 53).astype(float)
         df["is_ssh_ftp"] = df["dst_port"].astype(float).isin([21, 22]).astype(float)

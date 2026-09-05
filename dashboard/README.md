@@ -115,3 +115,10 @@ pnpm lint
 # Format code automatically
 pnpm format
 ```
+
+---
+
+## 📖 Complete Backend API & Telemetry Guide
+For full payload schemas, Redis ingestion metrics (`/api/v1/metrics/redis`), dynamic network scale configuration (`/api/v1/config`), and recommended UI widgets, consult:
+👉 **[DASHBOARD_INTEGRATION.md](../DASHBOARD_INTEGRATION.md)**
+

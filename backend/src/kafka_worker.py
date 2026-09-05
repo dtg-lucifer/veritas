@@ -1,8 +1,9 @@
 """
 Kafka Consumer Worker for Network Flow Ingestion & World Model Evaluation.
 Consumes continuous network flow records from Apache Kafka topic 'network_flows',
-aggregates them into 15-second state vectors, triggers the AI World Model
-autoregressive forward simulation, and streams real-time threat alerts to the SOC WebSocket feed.
+validates schemas with Redis telemetry, aggregates them into 15-second state vectors,
+triggers the AI World Model forward simulation, and streams real-time threat alerts to the SOC feed.
+Handles malformed inputs gracefully without server panic or freeze.
 """
 
 import os
@@ -13,7 +14,9 @@ from typing import List, Dict, Any, Optional, Callable
 from rich.console import Console
 from aiokafka import AIOKafkaConsumer
 
-from src.world_model_service import WorldModelService
+from src.world_model_service import WorldModelService, EvaluationResult
+from src.redis_metrics import redis_metrics
+from src.config import get_config
 
 console = Console()
 logger = logging.getLogger("kafka_worker")
@@ -56,13 +59,16 @@ class KafkaFlowConsumerWorker:
         if self.is_running:
             return
 
+        # Ensure Redis telemetry connection is initialized
+        await redis_metrics.connect()
+
         console.print(f"[bold cyan]🚀 Starting Kafka Consumer Worker on topic '{self.topic}' @ {self.bootstrap_servers}...[/bold cyan]")
         try:
             self.consumer = AIOKafkaConsumer(
                 self.topic,
                 bootstrap_servers=self.bootstrap_servers,
                 group_id=self.group_id,
-                value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+                value_deserializer=self._safe_deserialize,
                 auto_offset_reset="latest",
                 enable_auto_commit=True,
             )
@@ -76,6 +82,14 @@ class KafkaFlowConsumerWorker:
         except Exception as e:
             console.print(f"[bold red]❌ Failed to connect to Kafka at {self.bootstrap_servers}: {e}[/bold red]")
             self.is_running = False
+
+    @staticmethod
+    def _safe_deserialize(raw_bytes: bytes) -> Any:
+        """Safely deserializes JSON messages without throwing unhandled exceptions."""
+        try:
+            return json.loads(raw_bytes.decode("utf-8"))
+        except Exception as e:
+            return {"_deserialization_error": str(e), "_raw_snippet": str(raw_bytes[:200])}
 
     async def stop(self):
         """Stops tasks and closes Kafka connection gracefully."""
@@ -92,10 +106,13 @@ class KafkaFlowConsumerWorker:
             except Exception as e:
                 console.print(f"[red]Error stopping Kafka consumer: {e}[/red]")
 
+        await redis_metrics.close()
+
     async def _consume_loop(self):
         """Main loop fetching flow events from Kafka and routing to World Model service."""
         batch: List[Dict[str, Any]] = []
         batch_size = 25
+        cfg = get_config()
 
         try:
             async for msg in self.consumer:
@@ -103,12 +120,41 @@ class KafkaFlowConsumerWorker:
                     break
 
                 flow_record = msg.value
+
+                # 1. Validation & Schema Check
+                if not isinstance(flow_record, dict) or "_deserialization_error" in flow_record:
+                    err = flow_record.get("_deserialization_error", "Message is not a JSON object") if isinstance(flow_record, dict) else "Non-dict message"
+                    await redis_metrics.record_log_ignored(
+                        reason=err,
+                        raw_payload=flow_record,
+                        logger_id="malformed_producer"
+                    )
+                    continue
+
+                # Ensure minimum required fields exist
+                if not any(k in flow_record for k in ["dst_port", "protocol", "timestamp", "event_id"]):
+                    await redis_metrics.record_log_ignored(
+                        reason="Missing fundamental flow keys (dst_port/protocol/timestamp)",
+                        raw_payload=flow_record,
+                        logger_id=flow_record.get("logger_id", "unknown_logger")
+                    )
+                    continue
+
+                # Check logger identity & WebRTC status
+                logger_id = flow_record.get("logger_id") or flow_record.get("user") or flow_record.get("src_ip") or "default_logger"
+                dst_port = flow_record.get("dst_port", 0)
+                protocol = flow_record.get("protocol", 0)
+                is_webrtc = (protocol == 17 and dst_port in cfg.traffic_policy.conferencing_ports)
+
+                # Record processed log in Redis
+                await redis_metrics.record_log_processed(count=1, logger_id=str(logger_id), is_webrtc=is_webrtc)
+
                 batch.append(flow_record)
 
                 if len(batch) >= batch_size:
-                    alert = self.world_model_service.ingest_batch(batch)
+                    eval_res = self.world_model_service.ingest_batch(batch)
                     batch.clear()
-                    await self._handle_evaluation(alert)
+                    await self._handle_evaluation(eval_res)
 
         except asyncio.CancelledError:
             pass
@@ -117,8 +163,8 @@ class KafkaFlowConsumerWorker:
         finally:
             # Flush remaining batch on exit
             if batch:
-                alert = self.world_model_service.ingest_batch(batch)
-                await self._handle_evaluation(alert)
+                eval_res = self.world_model_service.ingest_batch(batch)
+                await self._handle_evaluation(eval_res)
 
     async def _periodic_flush_loop(self):
         """Timer task ensuring buffered flows are evaluated even during slow arrival rates."""
@@ -126,34 +172,52 @@ class KafkaFlowConsumerWorker:
             try:
                 await asyncio.sleep(FLUSH_INTERVAL_SECONDS)
                 if self.world_model_service.flow_buffer:
-                    alert = self.world_model_service.process_pending_flows(flush_all=True)
-                    await self._handle_evaluation(alert)
+                    eval_res = self.world_model_service.process_pending_flows(flush_all=True)
+                    await self._handle_evaluation(eval_res)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 console.print(f"[yellow]Warning in periodic flush loop: {e}[/yellow]")
 
-    async def _handle_evaluation(self, alert: Optional[Dict[str, Any]]):
-        """Dispatches an alert if threat detected, or prints normal evaluation status."""
-        if alert:
-            await self._dispatch_alert(alert)
+    async def _handle_evaluation(self, eval_res: EvaluationResult):
+        """Dispatches an alert if threat detected, or logs clean evaluation status."""
+        if not eval_res.evaluated:
+            # Active window is still accumulating flows; no new evaluation occurred
+            return
+
+        # Record evaluation metrics in Redis
+        await redis_metrics.record_evaluation(
+            risk_pct=eval_res.risk_pct,
+            stage=eval_res.stage,
+            policy=eval_res.policy,
+            flow_count=eval_res.flow_count,
+        )
+
+        if eval_res.is_threat and eval_res.alert_payload:
+            await self._dispatch_alert(eval_res.alert_payload)
         else:
-            latest = self.world_model_service.latest_report
-            if latest:
-                risk = latest.get("max_infiltration_prob", 0.0) * 100
-                stage = latest.get("peak_stage", "Benign")
-                policy = latest.get("recommended_policy", "ALLOW")
+            if eval_res.is_conferencing:
+                console.print(
+                    f"[bold cyan]🎥 [CONFERENCING MEDIA][/bold cyan] Evaluated Window | "
+                    f"Risk: [bold green]{eval_res.risk_pct:.1f}%[/bold green] | "
+                    f"Stage: [cyan]{eval_res.stage}[/cyan] | "
+                    f"Policy: [bold green]ALLOW[/bold green] (Google Meet / STUN Normalization)"
+                )
+            else:
                 history_len = len(self.world_model_service.state_history)
-                min_warmup = min(4, self.world_model_service.seq_len)
+                cfg = get_config()
+                min_warmup = min(cfg.thresholds.min_warmup_windows, self.world_model_service.seq_len)
                 if history_len < min_warmup:
                     console.print(
                         f"[bold cyan]⏳ [WARM-UP {history_len}/{min_warmup}][/bold cyan] Buffering Temporal Sequence | "
-                        f"Risk: [cyan]{risk:.1f}%[/cyan] | Stage: [cyan]{stage}[/cyan] | Policy: [bold green]ALLOW[/bold green]"
+                        f"Risk: [cyan]{eval_res.risk_pct:.1f}%[/cyan] | Stage: [cyan]{eval_res.stage}[/cyan] | Policy: [bold green]ALLOW[/bold green]"
                     )
                 else:
                     console.print(
-                        f"[bold green]🟢 [NORMAL TRAFFIC][/bold green] Evaluated Window | Risk: [bold green]{risk:.1f}%[/bold green] "
-                        f"| Stage: [cyan]{stage}[/cyan] | Policy: [bold green]{policy}[/bold green]"
+                        f"[bold green]🟢 [NORMAL TRAFFIC][/bold green] Evaluated Window | "
+                        f"Risk: [bold green]{eval_res.risk_pct:.1f}%[/bold green] | "
+                        f"Stage: [cyan]{eval_res.stage}[/cyan] | "
+                        f"Policy: [bold green]{eval_res.policy}[/bold green]"
                     )
 
     async def _dispatch_alert(self, alert: Dict[str, Any]):

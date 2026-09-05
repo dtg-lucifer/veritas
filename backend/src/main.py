@@ -20,6 +20,8 @@ from rich.console import Console
 
 from src.world_model_service import WorldModelService
 from src.kafka_worker import KafkaFlowConsumerWorker, KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC
+from src.config import get_config, save_config, FirewallConfig
+from src.redis_metrics import redis_metrics
 
 load_dotenv()
 
@@ -78,11 +80,13 @@ kafka_worker = KafkaFlowConsumerWorker(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Start Kafka Consumer Worker asynchronously
+    # Startup: Start Redis telemetry & Kafka Consumer Worker asynchronously
+    await redis_metrics.connect()
     await kafka_worker.start()
     yield
-    # Shutdown: Stop Kafka Consumer Worker gracefully
+    # Shutdown: Stop Kafka Consumer Worker and close Redis gracefully
     await kafka_worker.stop()
+    await redis_metrics.close()
 
 
 app = FastAPI(
@@ -136,6 +140,7 @@ class PolicyEnforceRequest(BaseModel):
 def health_check():
     """Health check endpoint confirming World Model status, Kafka consumer, and WebSocket connections."""
     wm_status = world_model_service.get_status()
+    cfg = get_config()
     return {
         "status": "healthy",
         "service": "Internal Firewall AI World Model Backend",
@@ -146,6 +151,12 @@ def health_check():
             "topic": kafka_worker.topic,
             "bootstrap_servers": kafka_worker.bootstrap_servers,
             "is_running": kafka_worker.is_running,
+        },
+        "network_config": {
+            "connected_clients_count": cfg.network.connected_clients_count,
+            "allow_webrtc_conferencing": cfg.traffic_policy.allow_webrtc_conferencing,
+            "alert_threshold": cfg.thresholds.alert_threshold,
+            "critical_threshold": cfg.thresholds.critical_threshold,
         },
         "world_model": {
             "window_size_seconds": wm_status["window_size_seconds"],
@@ -203,6 +214,49 @@ def reset_simulation():
         "message": "World Model state history and alerts cleared.",
     }
 
+
+# --- CONFIGURATION ENDPOINTS ---
+
+@app.get("/api/v1/config")
+def get_firewall_configuration():
+    """Returns active firewall configuration including client scaling, traffic policy, and thresholds."""
+    cfg = get_config()
+    return {
+        "status": "OK",
+        "config": cfg.model_dump(),
+    }
+
+
+@app.post("/api/v1/config")
+def update_firewall_configuration(new_config: FirewallConfig):
+    """
+    Dynamically updates network client capacity, WebRTC policies, or detection thresholds
+    and persists them to firewall_config.yaml without restarting the server.
+    """
+    success = save_config(new_config)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save configuration to disk")
+
+    # Update world model service runtime parameters
+    world_model_service.alert_threshold = new_config.thresholds.alert_threshold
+    world_model_service.window_size_seconds = new_config.thresholds.window_size_seconds
+
+    return {
+        "status": "CONFIG_UPDATED",
+        "message": "Firewall configuration successfully updated and persisted.",
+        "config": new_config.model_dump(),
+    }
+
+
+# --- REDIS TELEMETRY METRICS ENDPOINT ---
+
+@app.get("/api/v1/metrics/redis")
+async def get_redis_telemetry_metrics():
+    """
+    Retrieves distributed ingestion telemetry, error counters (logs_processed, logs_ignored),
+    active loggers, and recent malformed packet samples from Redis for SOC dashboard visualization.
+    """
+    return await redis_metrics.get_all_metrics()
 
 
 @app.post("/api/v1/logs/ingest")

@@ -98,10 +98,11 @@ FastAPI streaming gateway, asynchronous Apache Kafka consumer worker, WebSocket 
 ### 2.1 Run Message Broker & UI (Apache Kafka KRaft Mode)
 Start the passwordless Apache Kafka message broker and web management interface via Docker Compose:
 ```bash
-docker compose up -d kafka kafka-ui
+docker compose up -d kafka kafka-ui redis
 ```
 - Kafka Broker: `localhost:9092` (Inside containers: `kafka:29092`)
 - Kafka Web UI: `http://localhost:8081` (inspect topics, messages, consumer groups)
+- Redis Telemetry Store: `localhost:6379` (Metrics, ingestion counters, active loggers)
 
 ### 2.2 Run the Backend API Server
 ```bash
@@ -111,9 +112,47 @@ WINDOW_SECONDS=15 uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reloa
 - Interactive Swagger UI: `http://localhost:8000/docs`
 - Health Check: `http://localhost:8000/health`
 - Kafka Ingestion Status: `http://localhost:8000/api/v1/kafka/status`
+- Active Network & Firewall Config: `http://localhost:8000/api/v1/config`
+- Distributed Ingestion & Telemetry Metrics (Redis): `http://localhost:8000/api/v1/metrics/redis`
 - Latest Forward Simulation Report: `http://localhost:8000/api/v1/simulation/latest`
 - Live Alert Stream: `http://localhost:8000/api/v1/alerts`
 - WebSocket Incident Feed: `ws://localhost:8000/ws/alerts`
+
+### 2.3 Network Scale & WebRTC Configuration (`firewall_config.yaml`)
+To adjust client capacity or WebRTC conferencing policies, edit `backend/firewall_config.yaml` or use the REST API:
+```bash
+# View active configuration (e.g. connected clients count, WebRTC allowlist)
+curl http://localhost:8000/api/v1/config
+
+# Example: Scale network capacity to 100 connected clients (normalizes volumetric spikes)
+curl -X POST http://localhost:8000/api/v1/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "network": {
+      "connected_clients_count": 100,
+      "baseline_clients_capacity": 1,
+      "auto_scale_volumetric_thresholds": true
+    },
+    "traffic_policy": {
+      "allow_webrtc_conferencing": true,
+      "conferencing_ports": [3478, 19302, 19303, 19304, 19305, 19306, 19307, 19308, 19309],
+      "whitelisted_ports": [53, 80, 443, 3478, 8080, 8443],
+      "whitelisted_ips": []
+    },
+    "thresholds": {
+      "alert_threshold": 0.40,
+      "critical_threshold": 0.70,
+      "window_size_seconds": 15,
+      "min_warmup_windows": 4
+    },
+    "redis": {
+      "url": "redis://localhost:6379/0",
+      "key_prefix": "firewall:",
+      "enabled": true,
+      "metrics_ttl_seconds": 86400
+    }
+  }'
+```
 
 ---
 
