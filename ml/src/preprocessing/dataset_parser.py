@@ -62,7 +62,7 @@ class CERTDataParser:
                             except Exception:
                                 pass
                                 
-        console.print(f"[green]✓ Loaded {len(exact_labels)} exact malicious user-day attack events from answer CSVs.[/green]")
+        console.print(f"[green]Loaded {len(exact_labels)} exact malicious user-day attack events from answer CSVs.[/green]")
         return exact_labels
 
     def stream_device_events(self, chunksize: int = 200_000) -> Generator[pd.DataFrame, None, None]:

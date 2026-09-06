@@ -37,10 +37,10 @@ class RedisLogPublisher:
                 socket_connect_timeout=5.0
             )
             self.client.ping()
-            console.print(f"[green]✓ Connected to Redis at {self.redis_url} (Target Queue: '{self.queue_key}')[/green]")
+            console.print(f"[green]Connected to Redis at {self.redis_url} (Target Queue: '{self.queue_key}')[/green]")
             return True
         except Exception as e:
-            console.print(f"[yellow]⚠️ Could not connect to Redis at {self.redis_url} ({e}).[/yellow]")
+            console.print(f"[yellow]Could not connect to Redis at {self.redis_url} ({e}).[/yellow]")
             self.client = None
             return False
 

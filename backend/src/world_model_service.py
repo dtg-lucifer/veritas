@@ -101,16 +101,16 @@ class WorldModelService:
     def _initialize_model(self):
         """Loads World Model checkpoint and initialises simulator and explainer."""
         if not self.model_path.exists():
-            console.print(f"[bold red]❌ World Model checkpoint not found at: {self.model_path}[/bold red]")
+            console.print(f"[bold red]World Model checkpoint not found at: {self.model_path}[/bold red]")
             return
 
         try:
             self.wrapper = WorldModelWrapper.load(str(self.model_path))
             self.simulator = ForwardSimulator(self.wrapper)
             self.explainer = ThreatExplainer(self.wrapper)
-            console.print(f"[bold green]✓ Loaded AI World Model checkpoint from: {self.model_path}[/bold green]")
+            console.print(f"[bold green]Loaded AI World Model checkpoint from: {self.model_path}[/bold green]")
         except Exception as e:
-            console.print(f"[bold red]❌ Failed to load World Model checkpoint: {e}[/bold red]")
+            console.print(f"[bold red]Failed to load World Model checkpoint: {e}[/bold red]")
 
     def ingest_flow(self, flow: Dict[str, Any]):
         """Buffers a single incoming Kafka flow record."""
@@ -412,7 +412,7 @@ class WorldModelService:
         self.metrics["simulations_completed"] = 0
         self.metrics["alerts_generated"] = 0
         self.metrics["peak_risk_observed"] = 0.0
-        console.print("[bold cyan]🔄 World Model state history and flow buffers reset to clean state.[/bold cyan]")
+        console.print("[bold cyan]World Model state history and flow buffers reset to clean state.[/bold cyan]")
 
     def get_status(self) -> Dict[str, Any]:
         """Returns service status and metrics for health checks and APIs."""

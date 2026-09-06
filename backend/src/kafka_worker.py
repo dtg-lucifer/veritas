@@ -62,7 +62,7 @@ class KafkaFlowConsumerWorker:
         # Ensure Redis telemetry connection is initialized
         await redis_metrics.connect()
 
-        console.print(f"[bold cyan]🚀 Starting Kafka Consumer Worker on topic '{self.topic}' @ {self.bootstrap_servers}...[/bold cyan]")
+        console.print(f"[bold cyan]Starting Kafka Consumer Worker on topic '{self.topic}' @ {self.bootstrap_servers}...[/bold cyan]")
         try:
             self.consumer = AIOKafkaConsumer(
                 self.topic,
@@ -74,13 +74,13 @@ class KafkaFlowConsumerWorker:
             )
             await self.consumer.start()
             self.is_running = True
-            console.print(f"[bold green]✓ Kafka Consumer connected successfully to {self.bootstrap_servers} (topic: {self.topic})[/bold green]")
+            console.print(f"[bold green]Kafka Consumer connected successfully to {self.bootstrap_servers} (topic: {self.topic})[/bold green]")
 
             self._consumer_task = asyncio.create_task(self._consume_loop())
             self._timer_task = asyncio.create_task(self._periodic_flush_loop())
 
         except Exception as e:
-            console.print(f"[bold red]❌ Failed to connect to Kafka at {self.bootstrap_servers}: {e}[/bold red]")
+            console.print(f"[bold red]Failed to connect to Kafka at {self.bootstrap_servers}: {e}[/bold red]")
             self.is_running = False
 
     @staticmethod
@@ -159,7 +159,7 @@ class KafkaFlowConsumerWorker:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            console.print(f"[bold red]❌ Exception in Kafka consume loop: {e}[/bold red]")
+            console.print(f"[bold red]Exception in Kafka consume loop: {e}[/bold red]")
         finally:
             # Flush remaining batch on exit
             if batch:
@@ -198,7 +198,7 @@ class KafkaFlowConsumerWorker:
         else:
             if eval_res.is_conferencing:
                 console.print(
-                    f"[bold cyan]🎥 [MEDIA STREAMING / RTP][/bold cyan] Evaluated Window | "
+                    f"[bold cyan][MEDIA STREAMING / RTP][/bold cyan] Evaluated Window | "
                     f"Risk: [bold green]{eval_res.risk_pct:.1f}%[/bold green] | "
                     f"Stage: [cyan]{eval_res.stage}[/cyan] | "
                     f"Policy: [bold green]ALLOW[/bold green] (Real-Time Media Baseline)"
@@ -209,12 +209,12 @@ class KafkaFlowConsumerWorker:
                 min_warmup = min(cfg.thresholds.min_warmup_windows, self.world_model_service.seq_len)
                 if history_len < min_warmup:
                     console.print(
-                        f"[bold cyan]⏳ [WARM-UP {history_len}/{min_warmup}][/bold cyan] Buffering Temporal Sequence | "
+                        f"[bold cyan][WARM-UP {history_len}/{min_warmup}][/bold cyan] Buffering Temporal Sequence | "
                         f"Risk: [cyan]{eval_res.risk_pct:.1f}%[/cyan] | Stage: [cyan]{eval_res.stage}[/cyan] | Policy: [bold green]ALLOW[/bold green]"
                     )
                 else:
                     console.print(
-                        f"[bold green]🟢 [NORMAL TRAFFIC][/bold green] Evaluated Window | "
+                        f"[bold green][NORMAL TRAFFIC][/bold green] Evaluated Window | "
                         f"Risk: [bold green]{eval_res.risk_pct:.1f}%[/bold green] | "
                         f"Stage: [cyan]{eval_res.stage}[/cyan] | "
                         f"Policy: [bold green]{eval_res.policy}[/bold green]"
@@ -227,7 +227,7 @@ class KafkaFlowConsumerWorker:
             self.alerts_list.pop(0)
 
         console.print(
-            f"[bold red]🚨 [WORLD MODEL ALERT][/bold red] Risk: [bold]{alert.get('max_infiltration_prob', 0)*100:.1f}%[/bold] "
+            f"[bold red][WORLD MODEL ALERT][/bold red] Risk: [bold]{alert.get('max_infiltration_prob', 0)*100:.1f}%[/bold] "
             f"| Stage: [magenta]{alert.get('mitre_stage')}[/magenta] "
             f"| Policy: [bold yellow]{alert.get('policy_action')}[/bold yellow]"
         )

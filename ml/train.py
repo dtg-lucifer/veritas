@@ -51,7 +51,7 @@ def load_and_prepare_dataset(
     """
     cache_file = cache_dir / f"aggregated_states_w{window_size_sec}s.parquet"
     if use_cache and cache_file.exists():
-        console.print(f"[green]✓ Loading cached time-windowed states from: {cache_file}[/green]")
+        console.print(f"[green]Loading cached time-windowed states from: {cache_file}[/green]")
         return pd.read_parquet(cache_file)
 
     console.print("[yellow]Ingesting raw network flow records from external-network datasets...[/yellow]")
@@ -95,7 +95,7 @@ def load_and_prepare_dataset(
     # Concatenate and sort chronologically
     combined_flows = pd.concat(all_flow_dfs, ignore_index=True)
     combined_flows = combined_flows.sort_values(by="timestamp").reset_index(drop=True)
-    console.print(f"[green]✓ Ingested total of {len(combined_flows):,} flows across multi-stage attack scenarios.[/green]")
+    console.print(f"[green]Ingested total of {len(combined_flows):,} flows across multi-stage attack scenarios.[/green]")
 
     # Aggregate into state windows
     console.print(f"[cyan]Aggregating flows into {window_size_sec}-second Network State Vectors S_t...[/cyan]")
@@ -108,14 +108,14 @@ def load_and_prepare_dataset(
     attack_windows = int(df_states["is_attack"].sum())
     total_windows = len(df_states)
     console.print(
-        f"[green]✓ Generated {total_windows} chronological state windows "
+        f"[green]Generated {total_windows} chronological state windows "
         f"({attack_windows} threat/attack windows, {attack_windows/total_windows*100:.1f}% contamination).[/green]"
     )
 
     # Cache result
     cache_dir.mkdir(parents=True, exist_ok=True)
     df_states.to_parquet(cache_file, index=False)
-    console.print(f"[green]✓ Cached state matrix to: {cache_file}[/green]")
+    console.print(f"[green]Cached state matrix to: {cache_file}[/green]")
 
     return df_states
 
@@ -143,7 +143,7 @@ def run_training_pipeline(
     reports_path.mkdir(parents=True, exist_ok=True)
 
     console.print(Panel.fit(
-        "[bold cyan]🛡️ AI World Model Cyber Defense Engine — Training Pipeline[/bold cyan]\n"
+        "[bold cyan]AI World Model Cyber Defense Engine — Training Pipeline[/bold cyan]\n"
         "[bold white]Objective: Learn Transition Dynamics P(S_{t+1} | S_{<=t}) & Forecast Infiltration Horizon[/bold white]\n"
         f"[yellow]Device: {device} | Sequence Length: {seq_len} | Window: {window_size}s | Epochs: {epochs}[/yellow]",
         border_style="cyan"
@@ -163,7 +163,7 @@ def run_training_pipeline(
     X_seq, Y_state, Y_inf, Y_stage = build_temporal_sequences(
         df_states, seq_len=seq_len, forecast_horizon=1
     )
-    console.print(f"[green]✓ Created {len(X_seq)} temporal sequence samples for dynamics modeling.[/green]")
+    console.print(f"[green]Created {len(X_seq)} temporal sequence samples for dynamics modeling.[/green]")
 
     # Chronological Train/Test Split (80% Train, 20% Test)
     split_idx = int(0.80 * len(X_seq))
@@ -255,7 +255,7 @@ def run_training_pipeline(
     # Save trained World Model
     wm_save_path = str(models_path / "world_model.pt")
     world_model_wrapper.save(wm_save_path)
-    console.print(f"[green]✓ World Model saved to: {wm_save_path}[/green]")
+    console.print(f"[green]World Model saved to: {wm_save_path}[/green]")
 
     # 5. Train Static Baseline Classifier (Logistic Regression on single-window snapshots)
     console.print("\n[bold]Step 5: Training Static Logistic Regression Baseline (Single-Window Snapshot)...[/bold]")
@@ -265,7 +265,7 @@ def run_training_pipeline(
     baseline.fit(X_train_static, Y_train_inf)
     baseline_save_path = str(models_path / "baseline_classifier.joblib")
     baseline.save(baseline_save_path)
-    console.print(f"[green]✓ Static baseline classifier trained and saved to: {baseline_save_path}[/green]")
+    console.print(f"[green]Static baseline classifier trained and saved to: {baseline_save_path}[/green]")
 
     # 6. Evaluation & Comparative Benchmarking
     console.print("\n[bold]Step 6: Running Comparative Evaluation & Benchmark...[/bold]")
@@ -320,11 +320,11 @@ def run_training_pipeline(
 
     panel_text += f"\n[bold green]Root Cause & Feature Attribution:[/bold green]\n"
     for feat in explanation["top_driving_features"][:3]:
-        panel_text += f"  ⚠️ {feat['feature']}: attribution={feat['score']*100:.1f}%, observed value={feat['raw_value']:.2f}\n"
+        panel_text += f"  • {feat['feature']}: attribution={feat['score']*100:.1f}%, observed value={feat['raw_value']:.2f}\n"
 
     panel_text += f"\n[bold white]SOC Analyst Summary:[/bold white] {explanation['soc_explanation']}\n"
 
-    console.print(Panel(panel_text, title="🔮 World Model Forward Simulation Live Rollout", border_style="cyan"))
+    console.print(Panel(panel_text, title="World Model Forward Simulation Live Rollout", border_style="cyan"))
 
 
 if __name__ == "__main__":

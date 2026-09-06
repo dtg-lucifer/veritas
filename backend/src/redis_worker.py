@@ -94,7 +94,7 @@ class MultithreadedRedisLogWorker:
         self._timer_thread.start()
 
         console.print(
-            f"[bold green]✓ Redis Worker started[/bold green]\n"
+            f"[bold green]Redis Worker started[/bold green]\n"
             f"  Queue          : {self.queue_key}\n"
             f"  Window         : {self.window_seconds}s\n"
             f"  Alert Threshold: {self.alert_threshold}\n"
@@ -129,10 +129,10 @@ class MultithreadedRedisLogWorker:
                 socket_connect_timeout=5.0,
             )
             self._redis.ping()
-            console.print(f"[green]✓ Redis connected: {self.redis_url}[/green]")
+            console.print(f"[green]Redis connected: {self.redis_url}[/green]")
             return True
         except Exception as e:
-            console.print(f"[yellow]⚠ Redis connect failed ({e}), retrying in 5s…[/yellow]")
+            console.print(f"[yellow]Redis connect failed ({e}), retrying in 5s...[/yellow]")
             self._redis = None
             return False
 
@@ -227,14 +227,14 @@ class MultithreadedRedisLogWorker:
 
             # Console output for every window evaluation
             if status == "CRITICAL":
-                icon, color = "🚨", "bold red"
+                color = "bold red"
             elif status == "SUSPICIOUS":
-                icon, color = "⚠️ ", "bold yellow"
+                color = "bold yellow"
             else:
-                icon, color = "✅", "green"
+                color = "green"
 
             console.print(
-                f"  [{color}]{icon} User={user} | events={evt_count} | "
+                f"  [{color}][{status}] User={user} | events={evt_count} | "
                 f"risk={risk}/100 | status={status} | action={action}[/{color}]"
             )
 
@@ -280,7 +280,7 @@ class MultithreadedRedisLogWorker:
                         pass
 
                 console.print(
-                    f"     [bold red]└─ 🔔 ALERT pushed to WebSocket (risk={risk} >= {self.alert_threshold})[/bold red]"
+                    f"     [bold red]└─ [ALERT] pushed to WebSocket (risk={risk} >= {self.alert_threshold})[/bold red]"
                 )
 
         console.print(

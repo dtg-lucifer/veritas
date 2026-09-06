@@ -161,11 +161,11 @@ class DayTelemetryReplayer:
         day_key = day.strip().lower()
         producer = self.get_producer()
 
-        console.print(f"[bold cyan]📂 Selected Day:[/bold cyan] [bold green]{day.upper()}[/bold green] ({filepath.name})")
-        console.print(f"[bold cyan]🎯 Target Kafka Topic:[/bold cyan] [yellow]{self.topic}[/yellow] at [yellow]{self.bootstrap_servers}[/yellow]")
-        console.print(f"[bold cyan]⚡ Streaming Rate:[/bold cyan] {rate if rate > 0 else 'Unthrottled (Max)'} flows/sec")
+        console.print(f"[bold cyan]Selected Day:[/bold cyan] [bold green]{day.upper()}[/bold green] ({filepath.name})")
+        console.print(f"[bold cyan]Target Kafka Topic:[/bold cyan] [yellow]{self.topic}[/yellow] at [yellow]{self.bootstrap_servers}[/yellow]")
+        console.print(f"[bold cyan]Streaming Rate:[/bold cyan] {rate if rate > 0 else 'Unthrottled (Max)'} flows/sec")
         if scenario != "auto":
-            console.print(f"[bold cyan]🎯 Scenario Filter:[/bold cyan] [bold magenta]{scenario.upper()}[/bold magenta]")
+            console.print(f"[bold cyan]Scenario Filter:[/bold cyan] [bold magenta]{scenario.upper()}[/bold magenta]")
 
         sent_count = 0
         sleep_interval = (1.0 / rate) if rate > 0 else 0.0
@@ -245,5 +245,5 @@ class DayTelemetryReplayer:
                     break
 
         producer.flush()
-        console.print(f"[bold green]✓ Successfully published {sent_count:,} flow events to Kafka topic '{self.topic}'.[/bold green]")
+        console.print(f"[bold green]Successfully published {sent_count:,} flow events to Kafka topic '{self.topic}'.[/bold green]")
         return sent_count

@@ -75,12 +75,12 @@ class NetworkSniffer:
         try:
             # Initialize Kafka producer connection
             self.get_producer()
-            console.print(f"[bold green]✓ Connected to Kafka broker at {self.bootstrap_servers} (target topic: '{self.topic}')[/bold green]")
+            console.print(f"[bold green]Connected to Kafka broker at {self.bootstrap_servers} (target topic: '{self.topic}')[/bold green]")
         except Exception as e:
-            console.print(f"[bold red]❌ Failed to connect to Kafka at {self.bootstrap_servers}: {e}[/bold red]")
+            console.print(f"[bold red]Failed to connect to Kafka at {self.bootstrap_servers}: {e}[/bold red]")
             return
 
-        console.print(f"[bold cyan]🔍 Starting live packet capture on interface '{self.interface}'...[/bold cyan]")
+        console.print(f"[bold cyan]Starting live packet capture on interface '{self.interface}'...[/bold cyan]")
         if self.bpf_filter:
             console.print(f"[yellow]BPF Filter applied: '{self.bpf_filter}'[/yellow]")
 
@@ -123,12 +123,12 @@ class NetworkSniffer:
         self.is_running = True
         try:
             self.get_producer()
-            console.print(f"[bold green]✓ Connected to Kafka broker at {self.bootstrap_servers} (topic: '{self.topic}')[/bold green]")
+            console.print(f"[bold green]Connected to Kafka broker at {self.bootstrap_servers} (topic: '{self.topic}')[/bold green]")
         except Exception as e:
-            console.print(f"[bold red]❌ Failed to connect to Kafka at {self.bootstrap_servers}: {e}[/bold red]")
+            console.print(f"[bold red]Failed to connect to Kafka at {self.bootstrap_servers}: {e}[/bold red]")
             return
 
-        console.print(f"[bold cyan]📂 Reading PCAP file: {path.name}...[/bold cyan]")
+        console.print(f"[bold cyan]Reading PCAP file: {path.name}...[/bold cyan]")
 
         try:
             self.capture_obj = pyshark.FileCapture(
@@ -141,7 +141,7 @@ class NetworkSniffer:
                     break
                 self._process_single_packet(packet)
 
-            console.print(f"[bold green]✓ Completed PCAP replay: {self.captured_count} packets processed, {self.ingested_count} flow records published to Kafka topic '{self.topic}'.[/bold green]")
+            console.print(f"[bold green]Completed PCAP replay: {self.captured_count} packets processed, {self.ingested_count} flow records published to Kafka topic '{self.topic}'.[/bold green]")
 
         except Exception as e:
             console.print(f"[bold red]Error parsing PCAP file: {e}[/bold red]")
@@ -201,4 +201,4 @@ class NetworkSniffer:
                 self._producer.close()
             except Exception:
                 pass
-        console.print(f"[green]✓ Sniffer stopped. (Captured: {self.captured_count} packets, Published: {self.ingested_count} flow records to Kafka '{self.topic}')[/green]")
+        console.print(f"[green]Sniffer stopped. (Captured: {self.captured_count} packets, Published: {self.ingested_count} flow records to Kafka '{self.topic}')[/green]")

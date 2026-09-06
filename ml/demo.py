@@ -41,7 +41,7 @@ def generate_markdown_report(
     peak_step = max(report.rollout_steps, key=lambda s: s.infiltration_prob)
 
     lines = [
-        "# 🔮 AI World Model Cyber Defense — Forward Simulation Report",
+        "# AI World Model Cyber Defense — Forward Simulation Report",
         "",
         f"- **Generated At:** `{now_str}`",
         f"- **Evaluated Telemetry Source:** `{fpath.name}`",
@@ -54,7 +54,7 @@ def generate_markdown_report(
         "",
         "---",
         "",
-        "## 1. 📊 Observed Network State History (Context Windows)",
+        "## 1. Observed Network State History (Context Windows)",
         "",
         "| Window Time | Flows | SYN Ratio | Unique Ports | Byte Rate (KB/s) | Dominant Label |",
         "| :--- | :---: | :---: | :---: | :---: | :--- |",
@@ -70,7 +70,7 @@ def generate_markdown_report(
         "",
         "---",
         "",
-        "## 2. 🔮 K-Step Forward Simulation Rollout",
+        "## 2. K-Step Forward Simulation Rollout",
         "",
         "| Forecast Step | Lead Time | Infiltration Prob | Predicted MITRE Stage | Simulated Flows | Simulated SYN Ratio | Security Status | Enforced Policy |",
         "| :--- | :---: | :---: | :--- | :---: | :---: | :---: | :---: |",
@@ -85,7 +85,7 @@ def generate_markdown_report(
         "",
         "---",
         "",
-        "## 3. 🧠 Explainability & Threat Attribution",
+        "## 3. Explainability & Threat Attribution",
         "",
         f"- **Peak Infiltration Escalation Risk:** {report.max_infiltration_prob * 100:.1f}%",
         f"- **Anticipated MITRE ATT&CK Stage:** {report.peak_stage_name}",
@@ -208,7 +208,7 @@ def run_demo(
         sys.exit(1)
 
     console.print(Panel.fit(
-        "[bold cyan]🔮 AI World Model Cyber Defense — Forward Simulation Demo[/bold cyan]\n"
+        "[bold cyan]AI World Model Cyber Defense — Forward Simulation Demo[/bold cyan]\n"
         f"[white]Input File: {fpath.name} | Aggregation Window: {window_size}s | Forecast Horizon: {rollout_steps} Steps[/white]",
         border_style="cyan"
     ))
@@ -221,7 +221,7 @@ def run_demo(
     else:
         df_flows = extractor.load_cic_ids_2018_csv(fpath, max_rows=max_flows)
 
-    console.print(f"[green]✓ Ingested {len(df_flows):,} flow records.[/green]")
+    console.print(f"[green]Ingested {len(df_flows):,} flow records.[/green]")
 
     # 2. Window Aggregation
     console.print(f"[bold]2. Aggregating flows into continuous {window_size}s State Vectors S_t...[/bold]")
@@ -232,7 +232,7 @@ def run_demo(
         console.print(f"[bold red]Insufficient state windows ({len(df_states)}) for sequence length {seq_len}.[/bold red]")
         sys.exit(1)
 
-    console.print(f"[green]✓ Constructed {len(df_states)} time-windowed network state vectors.[/green]")
+    console.print(f"[green]Constructed {len(df_states)} time-windowed network state vectors.[/green]")
 
     # 3. Load Trained World Model
     console.print(f"[bold]3. Loading World Model checkpoint from: {mpath}...[/bold]")
@@ -276,7 +276,7 @@ def run_demo(
     console.print(f"[yellow]• Scenario Context: {scenario_note}[/yellow]")
 
     # 5. Display Observed History Windows
-    obs_table = Table(title=f"📊 Observed Network State History (Windows {start_idx}..{start_idx + seq_len - 1} of {window_size}s)")
+    obs_table = Table(title=f"Observed Network State History (Windows {start_idx}..{start_idx + seq_len - 1} of {window_size}s)")
     obs_table.add_column("Window Time", style="cyan")
     obs_table.add_column("Flows", justify="right")
     obs_table.add_column("SYN Ratio", justify="right")
@@ -302,7 +302,7 @@ def run_demo(
     explanation = explainer.explain_sequence(raw_history)
 
     # 7. Render Forward Simulation Timeline Table
-    sim_table = Table(title=f"🔮 K-Step Forward Simulation Rollout ({rollout_steps} Steps Ahead)")
+    sim_table = Table(title=f"K-Step Forward Simulation Rollout ({rollout_steps} Steps Ahead)")
     sim_table.add_column("Forecast Step", style="bold cyan")
     sim_table.add_column("Infiltration Prob", justify="center")
     sim_table.add_column("Predicted MITRE Stage", style="magenta", justify="left")
@@ -342,7 +342,7 @@ def run_demo(
         attr_panel += f"  • [bold]{feat['feature']}[/bold]: {feat['score']*100:.1f}% attribution (Observed: {feat['raw_value']:.2f})\n"
 
     attr_panel += f"\n[bold white]SOC Interpretability Guidance:[/bold white]\n  {explanation['soc_explanation']}\n"
-    console.print(Panel(attr_panel, title="🧠 World Model Interpretability & Attribution", border_style="yellow"))
+    console.print(Panel(attr_panel, title="World Model Interpretability & Attribution", border_style="yellow"))
 
     # 9. Optional Report File Export (Markdown or Plain Text)
     if output_path:
@@ -373,7 +373,7 @@ def run_demo(
             )
 
         out_file.write_text(content, encoding="utf-8")
-        console.print(f"\n[bold green]✓ Report successfully exported to: [underline]{out_file.resolve()}[/underline][/bold green]")
+        console.print(f"\n[bold green]Report successfully exported to: [underline]{out_file.resolve()}[/underline][/bold green]")
 
 
 if __name__ == "__main__":

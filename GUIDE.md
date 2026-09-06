@@ -1,4 +1,4 @@
-# 🔮 Network World Model Cyber Defense System — Developer Guide
+# Network World Model Cyber Defense System — Developer Guide
 
 Welcome to the **Network World Model Cyber Defense & Infiltration Forecasting System** repository (SIH 2026).
 
@@ -6,7 +6,7 @@ This guide provides a single, comprehensive reference for developers, researcher
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
 1. [Executive Overview & Problem Statement](#1-executive-overview--problem-statement)
 2. [End-to-End System Architecture](#2-end-to-end-system-architecture)
@@ -77,7 +77,7 @@ Given an observed history of time-windowed network states $S_t \in \mathbb{R}^{3
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 🔮 AI Network World Model                                   │
+│ AI Network World Model                                      │
 │   • Latent State Encoder: Linear + LayerNorm (z_t in R^64)  │
 │   • Recurrent Dynamics Core: 2-Layer Causal LSTM (h_t)      │
 │   • Temporal Multi-Head Attention: Long-Range Attention     │
@@ -88,7 +88,7 @@ Given an observed history of time-windowed network states $S_t \in \mathbb{R}^{3
                   │
                   ▼ (K-Step Autoregressive Forward Rollout)
 ┌─────────────────────────────────────────────────────────────┐
-│ 🔭 Forward Simulation Horizon (k = 1 ... K)                 │
+│ Forward Simulation Horizon (k = 1 ... K)                    │
 │   • Infiltration Risk Timeline: [P_1, P_2, ..., P_K]        │
 │   • Projected Network States: [\hat{S}_{t+1} ... \hat{S}_K] │
 │   • Tactical Stage Progression: Recon -> Infiltration -> C2 │

@@ -1,4 +1,4 @@
-# 🛡️ Internal Network Firewall — AI World Model Cyber Defense System
+# Internal Network Firewall — AI World Model Cyber Defense System
 
 > **Smart India Hackathon 2026**  
 > **Challenge:** AI Systems Capable of Learning Network Behaviour, Anticipating Attacker Progression & Proactive Cyber Defence Using World Models  
@@ -6,7 +6,7 @@
 
 ---
 
-## 🌟 Executive Summary & Problem Statement
+## Executive Summary & Problem Statement
 
 Traditional intrusion detection systems (IDS) and next-generation firewalls (NGFW) evaluate network packets and flows in isolation, mapping them to static benign or malicious binary labels. This point-in-time approach is fundamentally blind to the **temporal progression and causal physics of modern cyber attacks**:
 - An infiltration is not an isolated anomalous packet; it is a multi-stage trajectory unfolding over time.
@@ -27,7 +27,7 @@ Given an observed historical sequence of 15-second aggregated network state vect
 
 ---
 
-## 💡 How the System Works in Simple Words
+## How the System Works in Simple Words
 
 1. **System Ingests Network Logs**: Captures raw network packets and flow records from the gateway into Apache Kafka (`network_flows`). Labels are discarded—the model only inspects pure physical connection signals.
 2. **Compresses Flows into 15-Second Snapshots**: Groups all flows over each 15-second window into a **32-dimensional fingerprint** ($S_t$) representing connection count, port diversity, SYN/ACK ratios, byte rates, packet sizes, and inter-arrival times (IAT).
@@ -42,26 +42,26 @@ Given an observed historical sequence of 15-second aggregated network state vect
 
 ---
 
-## 🏗️ High-Level System Architecture
+## High-Level System Architecture
 
 ```mermaid
 flowchart LR
     subgraph Col1["  ◀ COLUMN 1: TELEMETRY & WORLD MODEL  "]
         direction TB
-        A["📡 1. Telemetry Ingestion<br/>NetFlow / Packet Sniffers / CIC-IDS-2018"]
-        B[("⚡ 2. Streaming Broker<br/>Apache Kafka (Topic: network_flows)")]
-        C["⏱️ 3. 15s State Aggregator<br/>32-D State Vector S_t (W=8 Context)"]
-        D["🧠 4. AI Network World Model<br/>LSTM + Multi-Head Attention Core"]
+        A["1. Telemetry Ingestion<br/>NetFlow / Packet Sniffers / CIC-IDS-2018"]
+        B[("2. Streaming Broker<br/>Apache Kafka (Topic: network_flows)")]
+        C["3. 15s State Aggregator<br/>32-D State Vector S_t (W=8 Context)"]
+        D["4. AI Network World Model<br/>LSTM + Multi-Head Attention Core"]
         
         A --> B --> C --> D
     end
 
     subgraph Col2["  ▶ COLUMN 2: SIMULATION & MITIGATION  "]
         direction TB
-        E["🔮 5. K-Step Forward Simulation<br/>Autoregressive Rollout (t+1 ... t+5)"]
-        F["🔍 6. Explainability & Attribution<br/>Temporal Attention & Feature Rankings"]
-        G["🛡️ 7. Autonomous Mitigation<br/>ALLOW | ALERT_ADMIN | ISOLATE_DEVICE"]
-        H["📊 8. Real-Time SOC Dashboard<br/>Live Incident Stream via WebSockets"]
+        E["5. K-Step Forward Simulation<br/>Autoregressive Rollout (t+1 ... t+5)"]
+        F["6. Explainability & Attribution<br/>Temporal Attention & Feature Rankings"]
+        G["7. Autonomous Mitigation<br/>ALLOW | ALERT_ADMIN | ISOLATE_DEVICE"]
+        H["8. Real-Time SOC Dashboard<br/>Live Incident Stream via WebSockets"]
         
         E --> F --> G --> H
     end
@@ -72,7 +72,7 @@ flowchart LR
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 internal-firewall-sih-2026/
@@ -127,7 +127,7 @@ internal-firewall-sih-2026/
 
 ---
 
-## ⚡ Quickstart: End-to-End System in 4 Steps
+## Quickstart: End-to-End System in 4 Steps
 
 ### Step 1: Start Apache Kafka & Kafka UI
 Launch the message broker (KRaft mode, port 9092, zero password) and Kafka UI (port 8081):
@@ -173,7 +173,7 @@ Navigate to **`http://localhost:3000`** in your browser.
 
 ---
 
-## 🔬 Machine Learning: Training & Benchmarking
+## Machine Learning: Training & Benchmarking
 
 ### Train the AI World Model & Evaluate Baseline
 Trains the Attention-Augmented Recurrent World Model, trains the static Logistic Regression baseline, benchmarks comparative metrics, and saves weights to `models/world_model.pt`:
@@ -197,7 +197,7 @@ uv run python demo.py --file data/external-network/cic-ids-2018/Thursday-01-03-2
 
 ---
 
-## 📚 Complete Documentation Index
+## Complete Documentation Index
 
 | Document | Description |
 | :--- | :--- |

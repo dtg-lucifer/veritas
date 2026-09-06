@@ -1,4 +1,4 @@
-# 🛡️ Internal Firewall — System Architecture & World Model Design
+# Internal Firewall — System Architecture & World Model Design
 
 > **Smart India Hackathon 2026**  
 > **Challenge:** Proactive Cyber Defense & Infiltration Forecasting Using AI World Models  
