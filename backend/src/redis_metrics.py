@@ -63,11 +63,11 @@ class RedisMetricsManager:
             )
             await self.client.ping()
             self._connected = True
-            console.print(f"[bold green]✓ Connected to Redis Telemetry Broker at {self.redis_url}[/bold green]")
+            console.print(f"[bold green]Connected to Redis Telemetry Broker at {self.redis_url}[/bold green]")
         except Exception as e:
             self._connected = False
             if not self._warned_connection_failure:
-                console.print(f"[bold yellow]⚠️ Redis Telemetry unavailable ({e}). Using in-memory metrics fallback.[/bold yellow]")
+                console.print(f"[bold yellow]Redis Telemetry unavailable ({e}). Using in-memory metrics fallback.[/bold yellow]")
                 self._warned_connection_failure = True
 
     async def close(self):

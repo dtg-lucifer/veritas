@@ -48,7 +48,7 @@ class WebSocketHub:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        console.print(f"[bold green]✓ Dashboard / Postman WebSocket client connected. Active connections: {len(self.active_connections)}[/bold green]")
+        console.print(f"[bold green]Dashboard / Postman WebSocket client connected. Active connections: {len(self.active_connections)}[/bold green]")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
@@ -90,7 +90,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="🛡️ Internal Firewall - AI World Model Gateway & SOC Stream",
+    title="Internal Firewall - AI World Model Gateway & SOC Stream",
     description="SIH 2026: Apache Kafka Stream Ingestion, 15s Network State Aggregation, Autoregressive Forward Simulation & Threat Alerts.",
     version="2.0.0",
     lifespan=lifespan,

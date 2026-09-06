@@ -52,7 +52,7 @@ class MockPacket:
 
 
 def test_logger_parsing():
-    console.print(Panel.fit("[bold green]🧪 Running PyShark Logger & Packet Parser Tests[/bold green]"))
+    console.print(Panel.fit("[bold green]Running PyShark Logger & Packet Parser Tests[/bold green]"))
 
     parser = PacketParser(default_user="AAM0658")
 
@@ -74,7 +74,7 @@ def test_logger_parsing():
     assert "flow_bytes_per_sec" in event
     assert "syn_flag_cnt" in event
     assert event["label"] == "Benign"
-    console.print(f"[green]✓ Threat packet parsed successfully:[/green] User={event['user']} URL={event['url']} Type={event['event_type']} Size={event['size']:,.0f}B Proto={event['protocol_name']}")
+    console.print(f"[green]Threat packet parsed successfully:[/green] User={event['user']} URL={event['url']} Type={event['event_type']} Size={event['size']:,.0f}B Proto={event['protocol_name']}")
 
     # 2. Test Normal Packet
     normal_pkt = MockPacket(src_ip="10.0.1.15", is_after_hours=False)
@@ -91,15 +91,15 @@ def test_logger_parsing():
     assert "github.com" in norm_event["url"]
     assert norm_event["protocol"] == 6
     assert norm_event["dst_port"] == 443
-    console.print(f"[green]✓ Normal packet parsed successfully:[/green] User={norm_event['user']} URL={norm_event['url']} AfterHours={norm_event['is_after_hours']}")
+    console.print(f"[green]Normal packet parsed successfully:[/green] User={norm_event['user']} URL={norm_event['url']} AfterHours={norm_event['is_after_hours']}")
 
     # 3. Test Redis Publisher Fallback & Batching
     publisher = RedisLogPublisher(redis_url="redis://localhost:6379/0", queue_key="test_logs_queue")
     # Should handle offline redis without crashing
     published = publisher.publish_event(event)
-    console.print(f"[green]✓ Redis publisher connection tolerance verified (Published={published})[/green]")
+    console.print(f"[green]Redis publisher connection tolerance verified (Published={published})[/green]")
 
-    console.print("[bold green]🎉 All PyShark logger parser unit tests passed with 100% SUCCESS![/bold green]")
+    console.print("[bold green]All PyShark logger parser unit tests passed with 100% SUCCESS![/bold green]")
 
 
 if __name__ == "__main__":

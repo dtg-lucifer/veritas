@@ -71,7 +71,7 @@ def load_config() -> FirewallConfig:
                 if isinstance(loaded, dict):
                     data = loaded
         except Exception as e:
-            console.print(f"[bold red]⚠️ Error reading {CONFIG_FILE_PATH}: {e}. Using defaults.[/bold red]")
+            console.print(f"[bold red]Error reading {CONFIG_FILE_PATH}: {e}. Using defaults.[/bold red]")
 
     config = FirewallConfig(**data)
 
@@ -112,8 +112,8 @@ def save_config(new_config: FirewallConfig) -> bool:
         with open(CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
         _active_config = new_config
-        console.print(f"[bold green]✓ Updated firewall configuration written to {CONFIG_FILE_PATH}[/bold green]")
+        console.print(f"[bold green]Updated firewall configuration written to {CONFIG_FILE_PATH}[/bold green]")
         return True
     except Exception as e:
-        console.print(f"[bold red]❌ Failed to write config to {CONFIG_FILE_PATH}: {e}[/bold red]")
+        console.print(f"[bold red]Failed to write config to {CONFIG_FILE_PATH}: {e}[/bold red]")
         return False

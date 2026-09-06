@@ -219,7 +219,7 @@ class BehavioralFeatureExtractor:
         # Save to parquet cache
         df.to_parquet(cache_path, index=False)
         total_anom = df["is_anomaly"].sum()
-        console.print(f"[bold green]✓ Vectorized extraction complete: {len(df)} records ({total_anom} exact attack events). Saved to {cache_path}[/bold green]")
+        console.print(f"[bold green]Vectorized extraction complete: {len(df)} records ({total_anom} exact attack events). Saved to {cache_path}[/bold green]")
         return df
 
 

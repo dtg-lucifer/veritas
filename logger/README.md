@@ -1,11 +1,11 @@
-# 🛡️ Network Telemetry Logger & Kafka Message Producer
+# Network Telemetry Logger & Kafka Message Producer
 
 High-speed network telemetry replayer and packet sniffer powered by **Apache Kafka**, **Pandas**, and **PyShark**.
 Streams standardized flow records into Kafka topic `network_flows` for continuous 15-second state aggregation and AI World Model forward simulation.
 
 ---
 
-## 🚀 Key Capabilities
+## Key Capabilities
 
 1. **Day-Based Telemetry Replayer (`--day`)**:
    - Stream actual traffic from any designated day of the CSE-CIC-IDS2018 benchmark:
@@ -25,7 +25,7 @@ Streams standardized flow records into Kafka topic `network_flows` for continuou
 
 ---
 
-## 📦 Usage Examples
+## Usage Examples
 
 ### 1. Attack & Day Telemetry Replay (Recommended for Testing & Benchmarks)
 ```bash
@@ -72,7 +72,7 @@ uv run logger pcap sample_traffic.pcap --topic network_flows
 
 ---
 
-## ⚙️ CLI Options
+## CLI Options
 
 | Flag | Shorthand | Default | Description |
 | :--- | :--- | :--- | :--- |

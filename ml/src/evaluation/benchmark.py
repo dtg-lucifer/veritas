@@ -100,7 +100,7 @@ class ModelBenchmark:
             json.dump(report, f, indent=2)
 
         # Render rich table
-        table = Table(title="⚔️ Benchmark Comparison: World Model vs. Static Baseline")
+        table = Table(title="Benchmark Comparison: World Model vs. Static Baseline")
         table.add_column("Metric", style="cyan", justify="left")
         table.add_column("Static Baseline (LogReg)", style="yellow", justify="center")
         table.add_column("World Model (Dynamics)", style="green", justify="center")
@@ -150,6 +150,6 @@ class ModelBenchmark:
         )
 
         console.print(table)
-        console.print(f"[green]✓ Full benchmark report saved to: {json_path}[/green]")
+        console.print(f"[green]Full benchmark report saved to: {json_path}[/green]")
 
         return report

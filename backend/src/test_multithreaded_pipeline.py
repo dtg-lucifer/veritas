@@ -30,7 +30,7 @@ console = Console()
 
 def test_multithreaded_pipeline():
     console.print(Panel.fit(
-        "[bold green]🧪 Running Full Multithreaded Redis MQ & 5-Minute Window ML Test[/bold green]",
+        "[bold green]Running Full Multithreaded Redis MQ & 5-Minute Window ML Test[/bold green]",
         border_style="green"
     ))
 
@@ -63,7 +63,7 @@ def test_multithreaded_pipeline():
     norm_assessment = predictor.evaluate_features("EMP-NORM-01", date_key_n, norm_window)
     
     console.print(
-        f"[green]✓ Normal Stream Assessment: Risk Score={norm_assessment['risk_score']}/100 "
+        f"[green]Normal Stream Assessment: Risk Score={norm_assessment['risk_score']}/100 "
         f"Status={norm_assessment['status']} Policy={norm_assessment['policy_action']}[/green]"
     )
     console.print(f"[dim]  Signals: {norm_assessment['signals']}[/dim]")
@@ -82,7 +82,7 @@ def test_multithreaded_pipeline():
     susp_assessment = predictor.evaluate_features("AAM0658", date_key_s, susp_window)
 
     console.print(
-        f"[bold red]✓ Suspicious Stream Assessment: Risk Score={susp_assessment['risk_score']}/100 "
+        f"[bold red]Suspicious Stream Assessment: Risk Score={susp_assessment['risk_score']}/100 "
         f"Status={susp_assessment['status']} Policy={susp_assessment['policy_action']}[/bold red]"
     )
     console.print(f"[yellow]  Signals: {susp_assessment['signals']}[/yellow]")
@@ -100,7 +100,7 @@ def test_multithreaded_pipeline():
     worker._evaluate_all_windows()
     assert worker.alerts_generated >= 1
     assert len(worker.alerts_list) >= 1
-    console.print(f"[green]✓ Alert list received {len(worker.alerts_list)} high-risk incidents.[/green]")
+    console.print(f"[green]Alert list received {len(worker.alerts_list)} high-risk incidents.[/green]")
     # Verify buffer is drained
     assert len(log_buffer.get_active_users()) == 0
 
@@ -109,13 +109,13 @@ def test_multithreaded_pipeline():
     worker.start()
     assert worker._consumer_thread is not None
     assert worker._timer_thread is not None
-    console.print(f"[green]✓ Consumer thread: '{worker._consumer_thread.name}', Timer thread: '{worker._timer_thread.name}'[/green]")
+    console.print(f"[green]Consumer thread: '{worker._consumer_thread.name}', Timer thread: '{worker._timer_thread.name}'[/green]")
     
     time.sleep(0.5)
     worker.stop(timeout=2.0)
-    console.print(f"[green]✓ Worker threads gracefully stopped: is_running={worker.is_running}[/green]")
+    console.print(f"[green]Worker threads gracefully stopped: is_running={worker.is_running}[/green]")
 
-    console.print("\n[bold green]🎉 All multithreaded ML pipeline and 5-minute window tests passed with 100% SUCCESS![/bold green]\n")
+    console.print("\n[bold green]All multithreaded ML pipeline and 5-minute window tests passed with 100% SUCCESS![/bold green]\n")
 
 
 if __name__ == "__main__":

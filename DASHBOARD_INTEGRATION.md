@@ -1,10 +1,10 @@
-# 🖥️ SOC Dashboard Integration Guide & API Reference
+# SOC Dashboard Integration Guide & API Reference
 
 This document details all available backend APIs, WebSocket streams, telemetry data structures, and recommended UI components for building the Security Operations Center (SOC) dashboard.
 
 ---
 
-## 🏗️ Architecture & Real-Time Data Flow
+## Architecture & Real-Time Data Flow
 
 ```
                                     ┌────────────────────────┐
@@ -51,7 +51,7 @@ This document details all available backend APIs, WebSocket streams, telemetry d
 
 ---
 
-## 📡 1. REST API Endpoints Reference
+## 1. REST API Endpoints Reference
 
 Base URL: `http://localhost:8000`
 
@@ -253,7 +253,7 @@ Base URL: `http://localhost:8000`
 
 ---
 
-## ⚡ 2. WebSocket Real-Time Stream
+## 2. WebSocket Real-Time Stream
 
 - **WebSocket URL**: `ws://localhost:8000/ws/alerts` (or `ws://localhost:8000/api/v1/ws/alerts`)
 - **Protocol**: JSON payloads over standard WebSocket.
@@ -308,7 +308,7 @@ Pushed when an administrator or automated policy executes host isolation:
 
 ---
 
-## 🎨 3. Dashboard Implementation Blueprint (UI Ideas & Widgets)
+## 3. Dashboard Implementation Blueprint (UI Ideas & Widgets)
 
 Here is a recommended feature breakdown for the Next.js frontend:
 
@@ -316,7 +316,7 @@ Here is a recommended feature breakdown for the Next.js frontend:
 - **Source**: `GET /api/v1/metrics/redis`
 - **Elements**:
   - **Processed vs. Ignored Gauge**: Donut chart showing `logs_processed` vs `logs_ignored`.
-  - **Conferencing Counter**: Badge displaying `logs_webrtc_conferencing` with a camera icon (`🎥 Video Call Normalization Active`).
+  - **Conferencing Counter**: Badge displaying `logs_webrtc_conferencing` (`Video Call Normalization Active`).
   - **Active Sensor Badges**: Pill badges showing active logger IDs from `active_loggers`.
   - **Rogue Logger / Malformed Log Drawer**: Expandable table of `recent_malformed_samples` showing the timestamp, logger ID, error reason, and payload snippet.
 
@@ -326,7 +326,7 @@ Here is a recommended feature breakdown for the Next.js frontend:
   - **Connected Clients Slider**: Number input or slider from 1 to 500 workstations (`connected_clients_count`). Updates volumetric baseline normalization in real-time.
   - **WebRTC Conferencing Switch**: Toggle for `allow_webrtc_conferencing` (enables/disables Google Meet STUN/TURN port 3478 dampening).
   - **Risk Threshold Sliders**: Adjust `alert_threshold` (e.g. 40%) and `critical_threshold` (e.g. 70%).
-  - **Save & Apply Button**: Sends `POST /api/v1/config` with toast notification (`✓ Configuration persisted`).
+  - **Save & Apply Button**: Sends `POST /api/v1/config` with toast notification (`Configuration persisted`).
 
 ### Widget 3: Forward Simulation Rollout Horizon (Line Chart)
 - **Source**: `GET /api/v1/simulation/latest` (field `rollout_steps`)

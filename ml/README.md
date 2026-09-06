@@ -1,10 +1,10 @@
-# 🔮 AI World Model for Proactive Cyber Defense & Infiltration Forecasting
+# AI World Model for Proactive Cyber Defense & Infiltration Forecasting
 
 This package implements the **Network World Model Cyber Defense Engine** for the **Internal Network Security Gateway** (Smart India Hackathon 2026).
 
 ---
 
-## 🌟 Paradigm Shift: From Static Classification to World Models
+## Paradigm Shift: From Static Classification to World Models
 
 Traditional machine learning intrusion detection systems (IDS) treat each network packet or flow in isolation, mapping it statically to a binary benign/malicious label. This discards the fundamental **temporal and causal structure** of real-world cyber infiltration:
 - The sequence in which reconnaissance ports are probed.
@@ -26,7 +26,7 @@ Given an observed history of time-windowed network states $S_t \in \mathbb{R}^{3
 
 ---
 
-## 🏗️ Deep World Model Architecture
+## Deep World Model Architecture
 
 ```
 Observed Sequence [S_{t-W+1}, ..., S_t] (History Window W=8)
@@ -57,7 +57,7 @@ $$\mathcal{L} = \mathcal{L}_{\text{dynamics}} + 1.5 \mathcal{L}_{\text{infiltrat
 
 ---
 
-## 📊 32-Dimensional Network State Vector ($S_t$)
+## 32-Dimensional Network State Vector ($S_t$)
 
 Each consecutive time window ($\Delta t = 15\text{s}$) aggregates individual flows into a structured state vector:
 
@@ -71,7 +71,7 @@ Each consecutive time window ($\Delta t = 15\text{s}$) aggregates individual flo
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ml/
@@ -106,7 +106,7 @@ ml/
 
 ---
 
-## 🚀 Quickstart: Training & Running Inference
+## Quickstart: Training & Running Inference
 
 ### 1. Run the Training Pipeline
 Trains the World Model, trains the Logistic Regression baseline, computes benchmark metrics, and runs a live forward simulation:
@@ -151,7 +151,7 @@ uv run python demo.py --file data/external-network/cic-ids-2018/Wednesday-14-02-
 
 ---
 
-## ⚔️ Benchmark: World Model vs. Static Baseline
+## Benchmark: World Model vs. Static Baseline
 
 The evaluation suite automatically measures the measurable advantage provided by temporal dynamics learning:
 - **Higher F1-Score and Precision**: Reduces false positives by learning normal flow progression patterns.

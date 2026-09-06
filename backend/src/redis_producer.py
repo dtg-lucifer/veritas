@@ -35,7 +35,7 @@ async def simulate_attack_stream(redis_url: str = REDIS_URL, queue_key: str = RE
     4. HTTP Wikileaks & Cloud Storage upload
     """
     console.print(Panel.fit(
-        f"[bold red]🚨 Starting Live Attack Stream Simulation -> Redis [{queue_key}][/bold red]\n"
+        f"[bold red]Starting Live Attack Stream Simulation -> Redis [{queue_key}][/bold red]\n"
         f"[cyan]Target Identity: AAM0658 | Gateway Subnet: 10.0.4.0/24[/cyan]",
         border_style="red"
     ))
@@ -112,7 +112,7 @@ async def simulate_attack_stream(redis_url: str = REDIS_URL, queue_key: str = RE
         await push_log_event(r, evt, queue_key)
         await asyncio.sleep(1.0)
 
-    console.print(f"[bold green]✓ Successfully dumped {len(events)} attack stream events into Redis queue '{queue_key}'![/bold green]")
+    console.print(f"[bold green]Successfully dumped {len(events)} attack stream events into Redis queue '{queue_key}'![/bold green]")
     await r.close()
 
 

@@ -1,4 +1,4 @@
-# 🔮 AI World Model Cyber Defense — Forward Simulation Report
+# AI World Model Cyber Defense — Forward Simulation Report
 
 - **Generated At:** `2026-09-04 23:08:38`
 - **Evaluated Telemetry Source:** `Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv`
@@ -11,7 +11,7 @@
 
 ---
 
-## 1. 📊 Observed Network State History (Context Windows)
+## 1. Observed Network State History (Context Windows)
 
 | Window Time | Flows | SYN Ratio | Unique Ports | Byte Rate (KB/s) | Dominant Label |
 | :--- | :---: | :---: | :---: | :---: | :--- |
@@ -26,7 +26,7 @@
 
 ---
 
-## 2. 🔮 K-Step Forward Simulation Rollout
+## 2. K-Step Forward Simulation Rollout
 
 | Forecast Step | Lead Time | Infiltration Prob | Predicted MITRE Stage | Simulated Flows | Simulated SYN Ratio | Security Status | Enforced Policy |
 | :--- | :---: | :---: | :--- | :---: | :---: | :---: | :---: |
@@ -38,7 +38,7 @@
 
 ---
 
-## 3. 🧠 Explainability & Threat Attribution
+## 3. Explainability & Threat Attribution
 
 - **Peak Infiltration Escalation Risk:** 99.9%
 - **Anticipated MITRE ATT&CK Stage:** Command & Control

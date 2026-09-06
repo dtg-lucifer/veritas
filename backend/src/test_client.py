@@ -25,19 +25,19 @@ client = TestClient(app)
 
 
 def run_backend_tests():
-    console.print(Panel.fit("[bold green]🧪 Running Backend & 5-Minute Window Integration Tests[/bold green]"))
+    console.print(Panel.fit("[bold green]Running Backend & 5-Minute Window Integration Tests[/bold green]"))
 
     # 1. Test Health Check
     res = client.get("/health")
     assert res.status_code == 200, f"Health check failed: {res.text}"
     health_data = res.json()
     assert health_data["models_ready"] is True
-    console.print(f"[green]✓ Health check passed:[/green] models_ready={health_data['models_ready']}")
+    console.print(f"[green]Health check passed:[/green] models_ready={health_data['models_ready']}")
 
     # 2. Test Redis Status Endpoint
     res = client.get("/api/v1/redis/status")
     assert res.status_code == 200
-    console.print(f"[green]✓ Redis worker status endpoint passed:[/green] queue_key={res.json()['queue_key']}")
+    console.print(f"[green]Redis worker status endpoint passed:[/green] queue_key={res.json()['queue_key']}")
 
     # 3. Test Direct Feature Prediction with 4-Model Ensemble
     predict_payload = {
@@ -66,7 +66,7 @@ def run_backend_tests():
     assert data["risk_score"] >= 40.0, f"Expected elevated risk, got {data['risk_score']}"
     assert data["status"] in ["SUSPICIOUS", "CRITICAL"]
     assert data["policy_action"] in ["ALERT_ADMIN", "ISOLATE_DEVICE"]
-    console.print(f"[bold green]✓ 4-Model Ensemble prediction:[/bold green] User={data['user']} Risk={data['risk_score']} Status={data['status']} Action={data['policy_action']}")
+    console.print(f"[bold green]4-Model Ensemble prediction:[/bold green] User={data['user']} Risk={data['risk_score']} Status={data['status']} Action={data['policy_action']}")
 
     # 4. Test Normal Mode Stream (Risk < 35, ALLOW)
     norm_events = generate_normal_stream(user="EMP-TEST-NORM-99", request_count=25)
@@ -81,7 +81,7 @@ def run_backend_tests():
     assert norm_assessment["risk_score"] < 35.0, f"Expected normal risk (<35), got {norm_assessment['risk_score']}"
     assert norm_assessment["status"] == "NORMAL"
     assert norm_assessment["policy_action"] == "ALLOW"
-    console.print(f"[bold green]✓ Normal Mode stream test passed:[/bold green] Risk={norm_assessment['risk_score']}/100 Status={norm_assessment['status']} Action={norm_assessment['policy_action']}")
+    console.print(f"[bold green]Normal Mode stream test passed:[/bold green] Risk={norm_assessment['risk_score']}/100 Status={norm_assessment['status']} Action={norm_assessment['policy_action']}")
 
     # 5. Test Suspicious Mode Stream with 5x Burst & High Download Bandwidth (Risk >= 70, ISOLATE_DEVICE)
     susp_events = generate_suspicious_stream(user="AAM0658", multiplier=5, attack_type="wikileaks")
@@ -96,7 +96,7 @@ def run_backend_tests():
     assert last_assessment["risk_score"] >= 65.0, f"Expected critical score for Suspicious Mode, got {last_assessment['risk_score']}"
     assert last_assessment["status"] in ["SUSPICIOUS", "CRITICAL"]
     assert last_assessment["policy_action"] in ["ALERT_ADMIN", "ISOLATE_DEVICE"]
-    console.print(f"[bold green]✓ Suspicious Mode 5x burst ingestion passed:[/bold green] Final Risk={last_assessment['risk_score']}/100 Status={last_assessment['status']} Action={last_assessment['policy_action']}")
+    console.print(f"[bold green]Suspicious Mode 5x burst ingestion passed:[/bold green] Final Risk={last_assessment['risk_score']}/100 Status={last_assessment['status']} Action={last_assessment['policy_action']}")
 
     # 6. Test Policy Enforcement Endpoint
     policy_payload = {
@@ -107,9 +107,9 @@ def run_backend_tests():
     }
     res = client.post("/api/v1/policy/enforce", json=policy_payload)
     assert res.status_code == 200
-    console.print(f"[bold green]✓ Policy enforcement passed:[/bold green] {res.json()['message']}")
+    console.print(f"[bold green]Policy enforcement passed:[/bold green] {res.json()['message']}")
 
-    console.print("[bold green]🎉 All 5-minute window backend integration tests passed with 100% success![/bold green]")
+    console.print("[bold green]All 5-minute window backend integration tests passed with 100% success![/bold green]")
 
 
 if __name__ == "__main__":

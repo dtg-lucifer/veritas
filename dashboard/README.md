@@ -1,4 +1,4 @@
-# 📊 SOC Security Operations Center Dashboard (Next.js & WebSocket Feed)
+# SOC Security Operations Center Dashboard (Next.js & WebSocket Feed)
 
 Real-time Next.js Security Operations Center (SOC) dashboard for the **Internal Network Firewall & AI World Model** system (SIH 2026).
 
@@ -6,7 +6,7 @@ Streams live forward simulation threat alerts, displays dynamic risk distributio
 
 ---
 
-## 🏗️ Architecture & Features
+## Architecture & Features
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -37,7 +37,7 @@ Streams live forward simulation threat alerts, displays dynamic risk distributio
 
 ---
 
-## 📁 Directory Structure
+## Directory Structure
 
 ```
 dashboard/
@@ -62,7 +62,7 @@ dashboard/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Prerequisites
 - Node.js 20+
@@ -78,6 +78,7 @@ pnpm install
 
 ### 3. Run Development Server
 ```bash
+cd dashboard
 pnpm dev
 # or: npm run dev
 ```
@@ -86,13 +87,14 @@ Open **`http://localhost:3000`** in your browser to view the live dashboard.
 
 ### 4. Build for Production
 ```bash
+cd dashboard
 pnpm build
 pnpm start
 ```
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 The dashboard connects by default to the local FastAPI backend:
 - **REST API Base URL:** `http://localhost:8000`
@@ -106,7 +108,7 @@ NEXT_PUBLIC_WS_URL=ws://localhost:8000/api/v1/ws/alerts
 
 ---
 
-## 🛠️ Code Quality & Formatting
+## Code Quality & Formatting
 We use **Biome** for fast linting and formatting:
 ```bash
 # Check code quality
@@ -118,7 +120,6 @@ pnpm format
 
 ---
 
-## 📖 Complete Backend API & Telemetry Guide
+## Complete Backend API & Telemetry Guide
 For full payload schemas, Redis ingestion metrics (`/api/v1/metrics/redis`), dynamic network scale configuration (`/api/v1/config`), and recommended UI widgets, consult:
-👉 **[DASHBOARD_INTEGRATION.md](../DASHBOARD_INTEGRATION.md)**
-
+[DASHBOARD_INTEGRATION.md](../DASHBOARD_INTEGRATION.md)

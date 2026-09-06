@@ -1,10 +1,10 @@
-# 🛡️ Internal Firewall - Backend Streaming Gateway & Forward Simulation Hub
+# Internal Firewall - Backend Streaming Gateway & Forward Simulation Hub
 
 Real-time streaming ingestion via **Apache Kafka**, state window aggregation, live WebSocket incident broadcasting, and forward simulation interface powered by **FastAPI** and the trained **Network World Model** from `../ml/models/world_model.pt`.
 
 ---
 
-## 🏗️ Architecture: Forward Simulation Stream Triage
+## Architecture: Forward Simulation Stream Triage
 
 To handle continuous high-throughput flow telemetry and proactively forecast infiltration timelines, the backend utilizes the **World Model Forward Simulation Pipeline**:
 
@@ -22,7 +22,7 @@ To handle continuous high-throughput flow telemetry and proactively forecast inf
                        │
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 🔮 AI Network World Model Forward Simulation                │
+│ AI Network World Model Forward Simulation                   │
 │   • Simulates Next State: \hat{S}_{t+1} = P(S_{t+1} | S_<=t)│
 │   • Autoregressively rolls forward K steps ahead (e.g. 5)   │
 │   • Projects Infiltration Risk Timeline: [P_1, ..., P_K]    │
@@ -33,7 +33,7 @@ To handle continuous high-throughput flow telemetry and proactively forecast inf
                        ├────────────────────────────────────────┐
                        ▼ (If Max Risk >= 40% / ALERT_ADMIN)     ▼ (If Normal)
           ┌────────────────────────────────┐         [ Retain State ]
-          │ 🚨 Broadcast Real-Time Alerts: │
+          │ Broadcast Real-Time Alerts:    │
           │   • WebSocket: /ws/alerts      │
           │   • Pre-Emptive Device Drop    │
           │   • Incident History: /alerts  │
@@ -42,7 +42,7 @@ To handle continuous high-throughput flow telemetry and proactively forecast inf
 
 ---
 
-## ⚡ Quickstart
+## Quickstart
 
 ### 1. Start Apache Kafka (Zero Password, KRaft Mode)
 ```bash
@@ -67,7 +67,7 @@ uv run logger --day=thursday --scenario=attack --max-flows=200 --rate=100
 
 ---
 
-## ⚙️ Configuration (Environment Variables)
+## Configuration (Environment Variables)
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
@@ -81,7 +81,7 @@ uv run logger --day=thursday --scenario=attack --max-flows=200 --rate=100
 
 ---
 
-## 📡 API Endpoints
+## API Endpoints
 
 | Method | Route | Description |
 | :--- | :--- | :--- |

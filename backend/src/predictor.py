@@ -52,7 +52,7 @@ class SecurityModelPredictor:
             except Exception as e:
                 print(f"[Predictor] Warning loading PyTorch Autoencoder: {e}")
 
-        print("✓ SecurityModelPredictor successfully initialized with 4-model ML ensemble.")
+        print("SecurityModelPredictor successfully initialized with 4-model ML ensemble.")
 
     def evaluate_features(
         self,

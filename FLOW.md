@@ -1,23 +1,23 @@
-# 🔮 Internal Firewall — World Model Pipeline Flow
+# Internal Firewall — World Model Pipeline Flow
 
 ```mermaid
 flowchart LR
     subgraph Col1["  ◀ COLUMN 1: TELEMETRY & WORLD MODEL  "]
         direction TB
-        A["📡 1. Telemetry Ingestion<br/>NetFlow / Packet Sniffers / CIC-IDS-2018"]
-        B[("⚡ 2. Streaming Broker<br/>Apache Kafka (Topic: network_flows)")]
-        C["⏱️ 3. 15s State Aggregator<br/>32-D State Vector S_t (W=8 Context)"]
-        D["🧠 4. AI Network World Model<br/>LSTM + Multi-Head Attention Core"]
+        A["1. Telemetry Ingestion<br/>NetFlow / Packet Sniffers / CIC-IDS-2018"]
+        B[("2. Streaming Broker<br/>Apache Kafka (Topic: network_flows)")]
+        C["3. 15s State Aggregator<br/>32-D State Vector S_t (W=8 Context)"]
+        D["4. AI Network World Model<br/>LSTM + Multi-Head Attention Core"]
         
         A --> B --> C --> D
     end
 
     subgraph Col2["  ▶ COLUMN 2: SIMULATION & MITIGATION  "]
         direction TB
-        E["🔮 5. K-Step Forward Simulation<br/>Autoregressive Rollout (t+1 ... t+5)"]
-        F["🔍 6. Explainability & Attribution<br/>Temporal Attention & Feature Rankings"]
-        G["🛡️ 7. Autonomous Mitigation<br/>ALLOW | ALERT_ADMIN | ISOLATE_DEVICE"]
-        H["📊 8. Real-Time SOC Dashboard<br/>Live Incident Stream via WebSockets"]
+        E["5. K-Step Forward Simulation<br/>Autoregressive Rollout (t+1 ... t+5)"]
+        F["6. Explainability & Attribution<br/>Temporal Attention & Feature Rankings"]
+        G["7. Autonomous Mitigation<br/>ALLOW | ALERT_ADMIN | ISOLATE_DEVICE"]
+        H["8. Real-Time SOC Dashboard<br/>Live Incident Stream via WebSockets"]
         
         E --> F --> G --> H
     end
@@ -28,7 +28,7 @@ flowchart LR
 
 ---
 
-## 💡 The Pipeline in Simple Words
+## The Pipeline in Simple Words
 
 1. **Ingest Raw Logs**: Sniffs live network packets or streams flow logs from the gateway into Apache Kafka (`network_flows`), discarding labels.
 2. **15s State Fingerprint ($S_t$)**: Bundles all traffic over 15 seconds into a single 32-dimensional number vector representing connection volumes, port diversity, SYN/ACK ratios, byte rates, packet sizes, and inter-arrival times.
