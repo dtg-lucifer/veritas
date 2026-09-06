@@ -11,9 +11,12 @@ from contextlib import asynccontextmanager
 import asyncio
 import json
 import os
+import time
+import resource
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from rich.console import Console
@@ -22,6 +25,8 @@ from src.world_model_service import WorldModelService
 from src.kafka_worker import KafkaFlowConsumerWorker, KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC
 from src.config import get_config, save_config, FirewallConfig
 from src.redis_metrics import redis_metrics
+
+SERVER_START_TIME = time.time()
 
 load_dotenv()
 
@@ -246,6 +251,114 @@ def update_firewall_configuration(new_config: FirewallConfig):
         "message": "Firewall configuration successfully updated and persisted.",
         "config": new_config.model_dump(),
     }
+
+
+# --- PROMETHEUS METRICS SCRAPING ENDPOINT ---
+
+@app.get("/metrics", response_class=PlainTextResponse)
+async def get_prometheus_metrics():
+    """
+    Exposes real-time firewall, AI World Model, and system metrics in Prometheus exposition format.
+    Scraped automatically by Prometheus on port 9090.
+    """
+    now = time.time()
+    uptime = now - SERVER_START_TIME
+
+    # Process memory (resident set size in bytes)
+    rusage = resource.getrusage(resource.RUSAGE_SELF)
+    mem_bytes = rusage.ru_maxrss * 1024  # Linux ru_maxrss is in KiB
+    cpu_user = rusage.ru_utime
+    cpu_sys = rusage.ru_stime
+
+    # Telemetry and World Model metrics
+    wm_metrics = world_model_service.get_status()
+    flows_ingested = wm_metrics.get("flows_ingested", 0)
+    windows_evaluated = wm_metrics.get("windows_evaluated", 0)
+    alerts_generated = wm_metrics.get("alerts_generated", 0)
+
+    cfg = get_config()
+    connected_clients = cfg.network.connected_clients_count
+    alert_thresh = cfg.thresholds.alert_threshold
+    crit_thresh = cfg.thresholds.critical_threshold
+
+    # Redis counters if available
+    try:
+        redis_data = await redis_metrics.get_all_metrics()
+        counters = redis_data.get("counters", {})
+        logs_proc = counters.get("logs_processed", 0)
+        logs_ign = counters.get("logs_ignored", 0)
+        logs_conf = counters.get("logs_webrtc_conferencing", 0)
+        logs_mal = counters.get("logs_malformed_schema", 0)
+        active_loggers_count = len(redis_data.get("active_loggers", []))
+    except Exception:
+        logs_proc, logs_ign, logs_conf, logs_mal, active_loggers_count = 0, 0, 0, 0, 0
+
+    ws_subs = len(ws_hub.active_connections)
+
+    metrics = [
+        "# HELP firewall_uptime_seconds Total runtime of the firewall backend in seconds.",
+        "# TYPE firewall_uptime_seconds counter",
+        f"firewall_uptime_seconds {uptime:.2f}",
+        "",
+        "# HELP firewall_process_memory_bytes Resident memory size of the firewall backend.",
+        "# TYPE firewall_process_memory_bytes gauge",
+        f"firewall_process_memory_bytes {mem_bytes}",
+        "",
+        "# HELP firewall_process_cpu_seconds_total Total user and system CPU time.",
+        "# TYPE firewall_process_cpu_seconds_total counter",
+        f'firewall_process_cpu_seconds_total{{mode="user"}} {cpu_user:.2f}',
+        f'firewall_process_cpu_seconds_total{{mode="system"}} {cpu_sys:.2f}',
+        "",
+        "# HELP firewall_flows_ingested_total Total raw network flows ingested into World Model buffer.",
+        "# TYPE firewall_flows_ingested_total counter",
+        f"firewall_flows_ingested_total {flows_ingested}",
+        "",
+        "# HELP firewall_windows_evaluated_total Total 15-second state windows evaluated.",
+        "# TYPE firewall_windows_evaluated_total counter",
+        f"firewall_windows_evaluated_total {windows_evaluated}",
+        "",
+        "# HELP firewall_alerts_generated_total Total security incident alerts triggered by forward rollout.",
+        "# TYPE firewall_alerts_generated_total counter",
+        f"firewall_alerts_generated_total {alerts_generated}",
+        "",
+        "# HELP firewall_active_ws_subscribers Number of connected real-time SOC dashboard WebSocket clients.",
+        "# TYPE firewall_active_ws_subscribers gauge",
+        f"firewall_active_ws_subscribers {ws_subs}",
+        "",
+        "# HELP firewall_active_loggers_count Number of active distributed network loggers streaming telemetry.",
+        "# TYPE firewall_active_loggers_count gauge",
+        f"firewall_active_loggers_count {active_loggers_count}",
+        "",
+        "# HELP firewall_logs_processed_total Total flow records processed across Kafka/Redis.",
+        "# TYPE firewall_logs_processed_total counter",
+        f"firewall_logs_processed_total {logs_proc}",
+        "",
+        "# HELP firewall_logs_ignored_total Total flow records ignored or rejected.",
+        "# TYPE firewall_logs_ignored_total counter",
+        f"firewall_logs_ignored_total {logs_ign}",
+        "",
+        "# HELP firewall_logs_webrtc_conferencing_total Total media/conferencing packets normalized.",
+        "# TYPE firewall_logs_webrtc_conferencing_total counter",
+        f"firewall_logs_webrtc_conferencing_total {logs_conf}",
+        "",
+        "# HELP firewall_logs_malformed_total Total malformed schema logs encountered.",
+        "# TYPE firewall_logs_malformed_total counter",
+        f"firewall_logs_malformed_total {logs_mal}",
+        "",
+        "# HELP firewall_connected_clients_capacity Configured connected client workstations capacity.",
+        "# TYPE firewall_connected_clients_capacity gauge",
+        f"firewall_connected_clients_capacity {connected_clients}",
+        "",
+        "# HELP firewall_threshold_alert Alert threshold ratio for forward infiltration risk.",
+        "# TYPE firewall_threshold_alert gauge",
+        f"firewall_threshold_alert {alert_thresh:.4f}",
+        "",
+        "# HELP firewall_threshold_critical Critical isolation threshold ratio for forward infiltration risk.",
+        "# TYPE firewall_threshold_critical gauge",
+        f"firewall_threshold_critical {crit_thresh:.4f}",
+        "",
+    ]
+    return "\n".join(metrics) + "\n"
 
 
 # --- REDIS TELEMETRY METRICS ENDPOINT ---
