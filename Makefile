@@ -10,7 +10,7 @@
         sniff replay-benign replay-botnet replay-bruteforce replay-infiltration \
         reset-simulation scale-100 check-health check-rollout check-alerts \
         check-redis check-kafka check-targets check-loki \
-        build-dashboard test-eval demo-terminal export-report clean
+        build-dashboard test-eval demo-terminal export-report report clean
 
 SHELL := /bin/bash
 ACTIVE_IFACE ?= $(shell ip route get 8.8.8.8 2>/dev/null | awk '{print $$5; exit}')
@@ -60,6 +60,7 @@ help:
 	@echo "ML OFFLINE WALKTHROUGH & REPORTS:"
 	@echo "  make demo-terminal    Run 32-dim state table & forward rollout terminal walkthrough"
 	@echo "  make export-report    Export formal Markdown SOC incident report"
+	@echo "  make report           Compile formal Veritas PDF Technical Report via Typst"
 	@echo "  make test-eval        Run test evaluation harness on mock flows"
 	@echo "  make build-dashboard  Verify Next.js production build"
 	@echo ""
@@ -201,6 +202,11 @@ test-eval:
 
 build-dashboard:
 	pnpm --prefix dashboard build
+
+report:
+	@echo "Compiling Veritas Technical Report via Typst..."
+	cd report && typst compile main.typ veritas_report.pdf
+	@echo "Successfully generated report/veritas_report.pdf"
 
 clean:
 	rm -rf dashboard/.next ml/reports/*.md
