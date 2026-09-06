@@ -317,38 +317,103 @@ function AlertCard({
 }
 
 export function LiveAlertFeed({ alerts, onIsolateDevice }: LiveAlertFeedProps) {
+  const [severityFilter, setSeverityFilter] = useState<"ALL" | "SUSPICIOUS" | "CRITICAL">("ALL");
+
+  const totalCount = alerts.length;
+  const suspiciousCount = alerts.filter((a) => a.classification === "SUSPICIOUS").length;
+  const criticalCount = alerts.filter((a) => a.classification === "CRITICAL").length;
+
+  const filteredAlerts = alerts.filter((alert) => {
+    if (severityFilter === "ALL") return true;
+    return alert.classification === severityFilter;
+  });
+
   return (
     <div className="flex flex-1 h-full min-h-0 flex-col space-y-3">
-      <div className="flex items-center justify-between">
+      {/* Header and Filter Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground tracking-wide uppercase">
             Live Incident Stream
           </h3>
+          <Badge
+            variant="outline"
+            className="border-emerald-500/30 text-emerald-500 bg-emerald-500/10 font-mono text-[10px] ml-1"
+          >
+            <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+            Live
+          </Badge>
         </div>
-        <Badge
-          variant="outline"
-          className="border-emerald-500/30 text-emerald-500 bg-emerald-500/10 font-mono text-[11px]"
-        >
-          <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-          Active
-        </Badge>
+
+        {/* Severity Filter Tabs */}
+        <div className="flex items-center gap-1 p-0.5 bg-muted/50 rounded-lg border border-border text-xs">
+          <button
+            type="button"
+            onClick={() => setSeverityFilter("ALL")}
+            className={`px-2.5 py-1 rounded-md text-[11px] transition-all flex items-center gap-1.5 cursor-pointer ${
+              severityFilter === "ALL"
+                ? "bg-card text-foreground font-semibold shadow-xs border border-border"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <span>All</span>
+            <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-muted text-muted-foreground">
+              {totalCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSeverityFilter("SUSPICIOUS")}
+            className={`px-2.5 py-1 rounded-md text-[11px] transition-all flex items-center gap-1.5 cursor-pointer ${
+              severityFilter === "SUSPICIOUS"
+                ? "bg-amber-500/15 text-amber-500 font-semibold shadow-xs border border-amber-500/30"
+                : "text-muted-foreground hover:text-amber-500"
+            }`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
+            <span>Suspicious</span>
+            <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-muted text-muted-foreground">
+              {suspiciousCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSeverityFilter("CRITICAL")}
+            className={`px-2.5 py-1 rounded-md text-[11px] transition-all flex items-center gap-1.5 cursor-pointer ${
+              severityFilter === "CRITICAL"
+                ? "bg-destructive/15 text-destructive font-semibold shadow-xs border border-destructive/30"
+                : "text-muted-foreground hover:text-destructive"
+            }`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-destructive inline-block" />
+            <span>Critical</span>
+            <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-muted text-muted-foreground">
+              {criticalCount}
+            </span>
+          </button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1 pr-2 max-h-[500px]">
         <div className="space-y-2.5">
           <AnimatePresence initial={false}>
-            {alerts.length === 0 ? (
+            {filteredAlerts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground space-y-2.5 border border-dashed border-border rounded-xl bg-card/40">
                 <ShieldCheck className="h-8 w-8 text-emerald-500/60" />
-                <p className="text-sm font-medium">Nominal Traffic Baseline</p>
+                <p className="text-sm font-medium">
+                  {severityFilter === "ALL"
+                    ? "Nominal Traffic Baseline"
+                    : `No ${severityFilter.toLowerCase()} incidents in current feed`}
+                </p>
                 <p className="text-xs max-w-xs text-muted-foreground">
-                  No active threat escalation detected in recent 15-second state
-                  windows.
+                  {severityFilter === "ALL"
+                    ? "No active threat escalation detected in recent 15-second state windows."
+                    : `Switch filter to 'All' or wait for live threat evaluation.`}
                 </p>
               </div>
             ) : (
-              alerts.map((alert) => (
+              filteredAlerts.map((alert) => (
                 <AlertCard
                   key={alert.id}
                   alert={alert}

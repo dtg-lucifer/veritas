@@ -12,7 +12,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "SIH Internal Firewall - SOC Security Dashboard",
+  title: "SIH Veritas - SOC Security Dashboard",
   description:
     "Real-time AI World Model Proactive Cyber Defense & Forward Simulation",
 };

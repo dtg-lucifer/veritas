@@ -83,7 +83,7 @@ class ModelBenchmark:
         fpr_reduction = ((baseline_metrics["false_positive_rate"] - wm_metrics["false_positive_rate"]) / max(baseline_metrics["false_positive_rate"], 1e-4)) * 100
 
         report = {
-            "title": "Internal Firewall AI World Model Benchmark vs Static Baseline",
+            "title": "Veritas AI World Model Benchmark vs Static Baseline",
             "summary": {
                 "dynamics_mse_loss": round(float(dynamics_mse), 4),
                 "forward_simulation_lead_time_steps": lead_time_steps,

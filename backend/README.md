@@ -1,4 +1,4 @@
-# Internal Firewall - Backend Streaming Gateway & Forward Simulation Hub
+# Veritas - Backend Streaming Gateway & Forward Simulation Hub
 
 Real-time streaming ingestion via **Apache Kafka**, state window aggregation, live WebSocket incident broadcasting, and forward simulation interface powered by **FastAPI** and the trained **Network World Model** from `../ml/models/world_model.pt`.
 

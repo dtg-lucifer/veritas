@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useHealthStream } from "@/lib/useHealthStream";
 import { Sidebar } from "./Sidebar";
 
 interface AppShellProps {
@@ -14,40 +15,8 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const [wsOnline, setWsOnline] = useState(false);
+  const { isConnected: wsOnline } = useHealthStream();
   const [resetting, setResetting] = useState(false);
-
-  useEffect(() => {
-    // Check WebSocket status periodically or connect a shared ping
-    const wsUrl =
-      process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/api/v1/ws/alerts";
-    let ws: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout;
-
-    const connectWs = () => {
-      try {
-        ws = new WebSocket(wsUrl);
-        ws.onopen = () => setWsOnline(true);
-        ws.onclose = () => {
-          setWsOnline(false);
-          reconnectTimeout = setTimeout(connectWs, 5000);
-        };
-        ws.onerror = () => {
-          setWsOnline(false);
-          ws?.close();
-        };
-      } catch {
-        setWsOnline(false);
-      }
-    };
-
-    connectWs();
-
-    return () => {
-      clearTimeout(reconnectTimeout);
-      if (ws) ws.close();
-    };
-  }, []);
 
   const handleGlobalReset = async () => {
     try {
@@ -81,15 +50,14 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Main Content Area */}
       <div
-        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${
-          collapsed ? "ml-16" : "ml-64"
-        }`}
+        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${collapsed ? "ml-16" : "ml-64"
+          }`}
       >
         {/* Top Operational Header */}
         <header className="h-16 border-b border-border bg-card/60 backdrop-blur-md sticky top-0 z-30 px-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-xs uppercase font-mono tracking-wider text-muted-foreground">
-              Smart India Hackathon 2026
+              Dashboard
             </span>
             <span className="text-muted-foreground/40">/</span>
             <span className="text-xs font-semibold text-foreground">
@@ -101,11 +69,10 @@ export function AppShell({ children }: AppShellProps) {
             {/* Live WebSocket Status Badge */}
             <Badge
               variant="outline"
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-medium transition-colors ${
-                wsOnline
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-medium transition-colors ${wsOnline
                   ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
                   : "bg-amber-500/10 text-amber-500 border-amber-500/30"
-              }`}
+                }`}
             >
               <Radio className={`h-3 w-3 ${wsOnline ? "animate-pulse" : ""}`} />
               <span>{wsOnline ? "WS FEED LIVE" : "WS RECONNECTING"}</span>

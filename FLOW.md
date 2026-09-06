@@ -1,4 +1,4 @@
-# Internal Firewall — World Model Pipeline Flow
+# Veritas — World Model Pipeline Flow
 
 ```mermaid
 flowchart LR

@@ -1,5 +1,5 @@
 """
-Internal Firewall Backend - Source Package Root
+Veritas Backend - Source Package Root
 """
 from pathlib import Path
 

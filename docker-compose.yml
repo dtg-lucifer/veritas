@@ -68,6 +68,8 @@ services:
     container_name: firewall_prometheus
     ports:
       - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     command:
@@ -75,7 +77,18 @@ services:
       - "--storage.tsdb.path=/prometheus"
     restart: unless-stopped
 
-  # 6. Grafana Operations Dashboard
+  # 6. Loki Distributed Log Aggregator
+  loki:
+    image: grafana/loki:latest
+    container_name: firewall_loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+    command: -config.file=/etc/loki/loki-config.yaml
+    restart: unless-stopped
+
+  # 7. Grafana Operations & Log Explorer Dashboard
   grafana:
     image: grafana/grafana:latest
     container_name: firewall_grafana
@@ -91,5 +104,6 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
+      - loki
     restart: unless-stopped
 

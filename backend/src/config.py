@@ -1,5 +1,5 @@
 """
-Configuration manager for the Internal Firewall & AI World Model Service.
+Configuration manager for the Veritas & AI World Model Service.
 Loads baseline parameters, network client scaling, traffic whitelists,
 and Redis credentials from firewall_config.yaml with dynamic reload support.
 """

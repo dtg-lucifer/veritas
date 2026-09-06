@@ -1,7 +1,7 @@
 [project]
 name = "logger"
 version = "0.1.0"
-description = "Network Packet Logger, Dataset Replayer & Kafka Message Producer for Internal Firewall"
+description = "Network Packet Logger, Dataset Replayer & Kafka Message Producer for Veritas"
 readme = "README.md"
 authors = [
     { name = "dtg-lucifer", email = "piushbasu@gmail.com" }

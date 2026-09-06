@@ -1,6 +1,6 @@
-# Internal Firewall & AI World Model — Judge Presentation & Operational Playbook
+# Veritas & AI World Model — Judge Presentation & Operational Playbook
 
-> **SIH 2026 Problem Statement**: Autonomous Internal Firewall with AI World Model Predictive Defense.  
+> **SIH 2026 Problem Statement**: Autonomous Veritas with AI World Model Predictive Defense.  
 > **Core Innovation**: Moving beyond reactive, single-packet classifiers to an **Attention-Augmented Recurrent World Model** that learns network transition dynamics $P(S_{t+1} \mid S_{\le t})$ across 15-second macro-states ($S_t \in \mathbb{R}^{32}$), forecasting the MITRE ATT&CK kill chain **$K$-steps into the future** before exfiltration or device takeover occurs.
 
 ---
@@ -52,14 +52,17 @@ To deliver a flawless, high-impact demonstration, open **4 terminal split-panes*
 
 ## 3. Act 1: Infrastructure & Gateway Bring-Up
 
-### Step 1.1: Start Core Infrastructure (Kafka, Kafka-UI, Redis)
+### Step 1.1: Start Core Infrastructure (Kafka, Kafka-UI, Redis, Prometheus, Loki, Grafana)
 ```bash
 # In project root:
-docker compose up -d kafka kafka-ui redis
+docker compose up -d kafka kafka-ui redis prometheus loki grafana
 ```
 - **Apache Kafka Broker**: `localhost:9092` (Distributed flow event bus)
 - **Kafka Web Console**: `http://localhost:8081` (Inspect live topics & consumer lags)
 - **Redis Telemetry Store**: `localhost:6379` (Real-time ingestion metrics & counters)
+- **Grafana Loki Log Store**: `http://localhost:3100` (Centralized log aggregation)
+- **Prometheus Metrics Engine**: `http://localhost:9090` (Scrapes `/metrics` from backend)
+- **Grafana SOC Dashboard**: `http://localhost:3001` (Unified visual metrics & Loki log explorer)
 
 ### Step 1.2: Launch the FastAPI AI World Model Gateway (Terminal 1)
 ```bash

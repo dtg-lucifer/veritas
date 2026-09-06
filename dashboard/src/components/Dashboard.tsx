@@ -27,12 +27,17 @@ import {
   type RiskData,
   RiskDistributionChart,
 } from "./charts/RiskDistributionChart";
+import { useHealthStream } from "@/lib/useHealthStream";
 
 export function Dashboard() {
-  const [healthData, setHealthData] = useState<any>(null);
-  const [kafkaStatus, setKafkaStatus] = useState<any>(null);
-  const [redisMetrics, setRedisMetrics] = useState<any>(null);
-  const [latestSim, setLatestSim] = useState<any>(null);
+  const {
+    healthData,
+    kafkaStatus,
+    redisMetrics,
+    latestSim,
+    refresh: refreshHealth,
+  } = useHealthStream();
+
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [_wsConnected, setWsConnected] = useState(false);
   const [quarantineIp, setQuarantineIp] = useState("");
@@ -45,50 +50,16 @@ export function Dashboard() {
     critical: 0,
   });
 
-  const fetchVitalTelemetry = useCallback(async () => {
-    try {
-      const [hRes, kRes, rRes, sRes] = await Promise.allSettled([
-        fetch("http://localhost:8000/health", {
-          signal: AbortSignal.timeout(3000),
-        }),
-        fetch("http://localhost:8000/api/v1/kafka/status", {
-          signal: AbortSignal.timeout(3000),
-        }),
-        fetch("http://localhost:8000/api/v1/metrics/redis", {
-          signal: AbortSignal.timeout(3000),
-        }),
-        fetch("http://localhost:8000/api/v1/simulation/latest", {
-          signal: AbortSignal.timeout(3000),
-        }),
-      ]);
-
-      if (hRes.status === "fulfilled" && hRes.value.ok) {
-        setHealthData(await hRes.value.json());
-      }
-      if (kRes.status === "fulfilled" && kRes.value.ok) {
-        setKafkaStatus(await kRes.value.json());
-      }
-      if (rRes.status === "fulfilled" && rRes.value.ok) {
-        const rData = await rRes.value.json();
-        setRedisMetrics(rData);
-        if (rData.counters) {
-          setRiskStats({
-            normal: rData.counters.alerts_normal || 40,
-            suspicious: rData.counters.alerts_suspicious || 0,
-            critical: rData.counters.alerts_critical || 0,
-          });
-        }
-      }
-      if (sRes.status === "fulfilled" && sRes.value.ok) {
-        const sData = await sRes.value.json();
-        if (sData.simulation) {
-          setLatestSim(sData.simulation);
-        }
-      }
-    } catch (err) {
-      console.error("Telemetry fetch error:", err);
+  // Sync risk distribution stats from real-time Redis telemetry
+  useEffect(() => {
+    if (redisMetrics?.counters) {
+      setRiskStats({
+        normal: redisMetrics.counters.alerts_normal ?? 40,
+        suspicious: redisMetrics.counters.alerts_suspicious ?? 0,
+        critical: redisMetrics.counters.alerts_critical ?? 0,
+      });
     }
-  }, []);
+  }, [redisMetrics]);
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -131,32 +102,40 @@ export function Dashboard() {
   }, []);
 
   useEffect(() => {
-    fetchVitalTelemetry();
     fetchAlerts();
-    const interval = setInterval(fetchVitalTelemetry, 4000);
-    return () => clearInterval(interval);
-  }, [fetchVitalTelemetry, fetchAlerts]);
+  }, [fetchAlerts]);
 
   // WebSocket Live Incident Feed
   useEffect(() => {
     const wsUrl =
       process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws/alerts";
     let ws: WebSocket | null = null;
-    let timer: NodeJS.Timeout;
+    let timer: any = null;
+    let isDestroyed = false;
 
     const connect = () => {
+      if (isDestroyed) return;
       try {
         ws = new WebSocket(wsUrl);
-        ws.onopen = () => setWsConnected(true);
+        ws.onopen = () => {
+          if (isDestroyed) {
+            ws?.close();
+            return;
+          }
+          setWsConnected(true);
+        };
         ws.onclose = () => {
           setWsConnected(false);
-          timer = setTimeout(connect, 4000);
+          if (!isDestroyed) {
+            timer = setTimeout(connect, 4000);
+          }
         };
         ws.onerror = () => {
           setWsConnected(false);
           ws?.close();
         };
         ws.onmessage = (event) => {
+          if (isDestroyed) return;
           try {
             const data = JSON.parse(event.data);
             if (data.type === "CONNECTION_ESTABLISHED") return;
@@ -226,14 +205,22 @@ export function Dashboard() {
         };
       } catch {
         setWsConnected(false);
+        if (!isDestroyed) {
+          timer = setTimeout(connect, 4000);
+        }
       }
     };
 
     connect();
 
     return () => {
+      isDestroyed = true;
       clearTimeout(timer);
-      if (ws) ws.close();
+      if (ws) {
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.close();
+      }
     };
   }, []);
 
@@ -319,7 +306,7 @@ export function Dashboard() {
             variant="outline"
             size="sm"
             onClick={() => {
-              fetchVitalTelemetry();
+              refreshHealth();
               fetchAlerts();
               toast.success("Telemetry Refreshed");
             }}
@@ -344,24 +331,24 @@ export function Dashboard() {
           <CardContent>
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-bold text-foreground font-mono">
-                {kafkaStatus?.flows_ingested || processedLogsCount}
+                {kafkaStatus?.flows_ingested ?? processedLogsCount}
               </span>
               <Badge
                 variant="outline"
                 className={`text-[10px] font-mono ${
-                  kafkaStatus?.status === "RUNNING"
+                  kafkaStatus?.is_running || kafkaStatus?.status === "RUNNING"
                     ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
                     : "text-muted-foreground bg-muted border-border"
                 }`}
               >
-                {kafkaStatus?.status === "RUNNING"
+                {kafkaStatus?.is_running || kafkaStatus?.status === "RUNNING"
                   ? "KAFKA LIVE"
-                  : "BROKER READY"}
+                  : "BROKER STANDBY"}
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground mt-1 flex items-center justify-between font-mono">
               <span>Topic: {kafkaStatus?.topic || "network_flows"}</span>
-              <span>Lag: {kafkaStatus?.pending_flows || 0}</span>
+              <span>Lag: {kafkaStatus?.pending_flows ?? 0}</span>
             </p>
           </CardContent>
         </Card>
@@ -401,7 +388,7 @@ export function Dashboard() {
           <CardContent>
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-bold text-foreground font-mono">
-                {healthData?.models_ready !== false ? "ONLINE" : "STANDBY"}
+                {healthData?.model_ready || healthData?.models_ready ? "ONLINE" : "STANDBY"}
               </span>
               <Badge
                 variant="outline"
@@ -413,7 +400,7 @@ export function Dashboard() {
             <p className="text-[11px] text-muted-foreground mt-1 flex items-center justify-between font-mono">
               <span>
                 Clients:{" "}
-                {healthData?.config?.network?.connected_clients_count || 1}
+                {healthData?.network_config?.connected_clients_count || healthData?.config?.network?.connected_clients_count || 1}
               </span>
               <span>Subscribers: {healthData?.active_ws_subscribers || 0}</span>
             </p>

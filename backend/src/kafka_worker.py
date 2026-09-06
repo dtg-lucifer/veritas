@@ -17,6 +17,7 @@ from aiokafka import AIOKafkaConsumer
 from src.world_model_service import WorldModelService, EvaluationResult
 from src.redis_metrics import redis_metrics
 from src.config import get_config
+from src.loki_logger import log_to_loki
 
 console = Console()
 logger = logging.getLogger("kafka_worker")
@@ -203,6 +204,13 @@ class KafkaFlowConsumerWorker:
                     f"Stage: [cyan]{eval_res.stage}[/cyan] | "
                     f"Policy: [bold green]ALLOW[/bold green] (Real-Time Media Baseline)"
                 )
+                log_to_loki(
+                    message=f"[MEDIA STREAMING / RTP] Evaluated Window | Risk: {eval_res.risk_pct:.1f}% | Stage: {eval_res.stage} | Policy: ALLOW",
+                    level="info",
+                    event_type="media_stream",
+                    extra_labels={"policy": "ALLOW", "stage": eval_res.stage, "severity": "NORMAL"},
+                    details={"risk_pct": eval_res.risk_pct, "stage": eval_res.stage, "flow_count": eval_res.flow_count}
+                )
             else:
                 history_len = len(self.world_model_service.state_history)
                 cfg = get_config()
@@ -219,17 +227,44 @@ class KafkaFlowConsumerWorker:
                         f"Stage: [cyan]{eval_res.stage}[/cyan] | "
                         f"Policy: [bold green]{eval_res.policy}[/bold green]"
                     )
+                    log_to_loki(
+                        message=f"[NORMAL TRAFFIC] Evaluated Window | Risk: {eval_res.risk_pct:.1f}% | Stage: {eval_res.stage} | Policy: {eval_res.policy}",
+                        level="info",
+                        event_type="normal_traffic",
+                        extra_labels={"policy": eval_res.policy, "stage": eval_res.stage, "severity": eval_res.severity},
+                        details={"risk_pct": eval_res.risk_pct, "stage": eval_res.stage, "flow_count": eval_res.flow_count}
+                    )
 
     async def _dispatch_alert(self, alert: Dict[str, Any]):
-        """Dispatches an alert to WebSocket clients and internal alert log."""
+        """Dispatches an alert to WebSocket clients, internal alert log, and Grafana Loki."""
         self.alerts_list.append(alert)
         if len(self.alerts_list) > 100:
             self.alerts_list.pop(0)
 
+        risk_pct = alert.get("max_infiltration_prob", 0) * 100
+        stage = alert.get("mitre_stage", "Unknown")
+        policy = alert.get("policy_action", "ALERT_ADMIN")
+        target = alert.get("target", "10.0.4.21")
+        sev = alert.get("severity", "CRITICAL" if risk_pct >= 70 else "SUSPICIOUS")
+
         console.print(
-            f"[bold red][WORLD MODEL ALERT][/bold red] Risk: [bold]{alert.get('max_infiltration_prob', 0)*100:.1f}%[/bold] "
-            f"| Stage: [magenta]{alert.get('mitre_stage')}[/magenta] "
-            f"| Policy: [bold yellow]{alert.get('policy_action')}[/bold yellow]"
+            f"[bold red][WORLD MODEL ALERT][/bold red] Risk: [bold]{risk_pct:.1f}%[/bold] "
+            f"| Stage: [magenta]{stage}[/magenta] "
+            f"| Policy: [bold yellow]{policy}[/bold yellow]"
+        )
+
+        # Ship alert event to Grafana Loki
+        log_to_loki(
+            message=f"[WORLD MODEL ALERT] Target: {target} | Risk: {risk_pct:.1f}% | Stage: {stage} | Policy: {policy}",
+            level="critical" if sev == "CRITICAL" else "warn",
+            event_type="threat_alert",
+            extra_labels={
+                "severity": sev,
+                "policy": policy,
+                "stage": stage,
+                "target": target,
+            },
+            details=alert,
         )
 
         if self.broadcast_callback:

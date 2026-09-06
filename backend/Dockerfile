@@ -34,7 +34,8 @@ ENV KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 ENV KAFKA_TOPIC=network_flows
 ENV WINDOW_SECONDS=15
 ENV ALERT_THRESHOLD=40.0
-
+ENV LOKI_URL=http://loki:3100
+ENV LOKI_ENABLED=true
 
 # Start FastAPI server
 CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

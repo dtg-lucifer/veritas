@@ -12,13 +12,14 @@ import {
   Radio,
   Settings2,
   Shield,
+  ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import { useHealthStream } from "@/lib/useHealthStream";
 
 interface NavItem {
   name: string;
@@ -29,6 +30,12 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: "Overview", href: "/", icon: LayoutDashboard },
+  {
+    name: "Live Alert Feed",
+    href: "/alerts",
+    icon: ShieldAlert,
+    badge: "LIVE",
+  },
   { name: "Admin Config", href: "/config", icon: Settings2 },
   { name: "Full Statistics", href: "/stats", icon: BarChart3 },
   {
@@ -49,39 +56,14 @@ export function Sidebar({
   setCollapsed: (c: boolean | ((prev: boolean) => boolean)) => void;
 }) {
   const pathname = usePathname();
-  const [backendAlive, setBackendAlive] = useState<boolean | null>(null);
-  const [backendLatency, setBackendLatency] = useState<number | null>(null);
-
-  const checkHealth = useCallback(async () => {
-    const start = performance.now();
-    try {
-      const res = await fetch("http://localhost:8000/health", {
-        signal: AbortSignal.timeout(3000),
-      });
-      const end = performance.now();
-      if (res.ok) {
-        setBackendAlive(true);
-        setBackendLatency(Math.round(end - start));
-      } else {
-        setBackendAlive(false);
-      }
-    } catch {
-      setBackendAlive(false);
-      setBackendLatency(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    checkHealth();
-    const interval = setInterval(checkHealth, 5000);
-    return () => clearInterval(interval);
-  }, [checkHealth]);
+  const { isConnected, latencyMs } = useHealthStream();
+  const backendAlive = isConnected;
+  const backendLatency = latencyMs ?? 2;
 
   return (
     <aside
-      className={`fixed top-0 left-0 z-40 h-screen border-r border-border bg-card transition-all duration-300 flex flex-col justify-between select-none ${
-        collapsed ? "w-16" : "w-64"
-      }`}
+      className={`fixed top-0 left-0 z-40 h-screen border-r border-border bg-card transition-all duration-300 flex flex-col justify-between select-none ${collapsed ? "w-16" : "w-64"
+        }`}
     >
       {/* Top Brand Header */}
       <div>
@@ -96,7 +78,7 @@ export function Sidebar({
               </div>
               <div className="flex flex-col">
                 <span className="font-bold text-sm tracking-wide text-foreground leading-tight">
-                  INTERNAL FIREWALL
+                  Veritas XAI
                 </span>
                 <span className="text-[10px] text-muted-foreground font-mono">
                   AI World Model SOC
@@ -106,7 +88,7 @@ export function Sidebar({
           )}
 
           {collapsed && (
-            <Link href="/" className="mx-auto" title="Internal Firewall SOC">
+            <Link href="/" className="mx-auto" title="Veritas SOC">
               <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
                 <Shield className="h-5 w-5 text-primary" />
               </div>
@@ -138,30 +120,27 @@ export function Sidebar({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group relative ${
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20 font-semibold"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                } ${collapsed ? "justify-center px-0 h-10" : ""}`}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group relative ${isActive
+                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20 font-semibold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  } ${collapsed ? "justify-center px-0 h-10" : ""}`}
                 title={collapsed ? item.name : undefined}
               >
                 <Icon
-                  className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-110 ${
-                    isActive
-                      ? "text-primary-foreground"
-                      : "text-muted-foreground group-hover:text-foreground"
-                  }`}
+                  className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-110 ${isActive
+                    ? "text-primary-foreground"
+                    : "text-muted-foreground group-hover:text-foreground"
+                    }`}
                 />
                 {!collapsed && (
                   <span className="truncate flex-1">{item.name}</span>
                 )}
                 {!collapsed && item.badge && (
                   <span
-                    className={`text-[10px] uppercase font-mono px-1.5 py-0.5 rounded font-bold ${
-                      isActive
-                        ? "bg-primary-foreground/20 text-primary-foreground"
-                        : "bg-primary/10 text-primary border border-primary/20"
-                    }`}
+                    className={`text-[10px] uppercase font-mono px-1.5 py-0.5 rounded font-bold ${isActive
+                      ? "bg-primary-foreground/20 text-primary-foreground"
+                      : "bg-primary/10 text-primary border border-primary/20"
+                      }`}
                   >
                     {item.badge}
                   </span>
@@ -181,13 +160,12 @@ export function Sidebar({
         {/* Subsystem Health Indicator Pill */}
         <Link
           href="/health"
-          className={`block rounded-lg p-2 transition-all border ${
-            backendAlive === true
-              ? "bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
-              : backendAlive === false
-                ? "bg-destructive/5 hover:bg-destructive/10 border-destructive/20 text-destructive"
-                : "bg-muted border-border text-muted-foreground"
-          } ${collapsed ? "text-center py-2 px-0" : ""}`}
+          className={`block rounded-lg p-2 transition-all border ${backendAlive === true
+            ? "bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+            : backendAlive === false
+              ? "bg-destructive/5 hover:bg-destructive/10 border-destructive/20 text-destructive"
+              : "bg-muted border-border text-muted-foreground"
+            } ${collapsed ? "text-center py-2 px-0" : ""}`}
           title={
             backendAlive === true
               ? `Backend Online (${backendLatency}ms) - View Health`
@@ -199,23 +177,21 @@ export function Sidebar({
           {collapsed ? (
             <div className="flex flex-col items-center justify-center">
               <span
-                className={`relative flex h-2.5 w-2.5 ${
-                  backendAlive === true
-                    ? "text-emerald-500"
-                    : "text-destructive"
-                }`}
+                className={`relative flex h-2.5 w-2.5 ${backendAlive === true
+                  ? "text-emerald-500"
+                  : "text-destructive"
+                  }`}
               >
                 {backendAlive === true && (
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 )}
                 <span
-                  className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                    backendAlive === true
-                      ? "bg-emerald-500"
-                      : backendAlive === false
-                        ? "bg-destructive"
-                        : "bg-yellow-500"
-                  }`}
+                  className={`relative inline-flex rounded-full h-2.5 w-2.5 ${backendAlive === true
+                    ? "bg-emerald-500"
+                    : backendAlive === false
+                      ? "bg-destructive"
+                      : "bg-yellow-500"
+                    }`}
                 />
               </span>
             </div>
@@ -227,13 +203,12 @@ export function Sidebar({
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   )}
                   <span
-                    className={`relative inline-flex rounded-full h-2 w-2 ${
-                      backendAlive === true
-                        ? "bg-emerald-500"
-                        : backendAlive === false
-                          ? "bg-destructive"
-                          : "bg-yellow-500"
-                    }`}
+                    className={`relative inline-flex rounded-full h-2 w-2 ${backendAlive === true
+                      ? "bg-emerald-500"
+                      : backendAlive === false
+                        ? "bg-destructive"
+                        : "bg-yellow-500"
+                      }`}
                   />
                 </span>
                 <span className="text-xs font-medium">

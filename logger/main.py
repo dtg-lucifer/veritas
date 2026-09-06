@@ -26,7 +26,7 @@ if str(LOGGER_DIR) not in sys.path:
 from src.day_replayer import DayTelemetryReplayer, DAY_FILE_MAPPING
 
 app = typer.Typer(
-    help="Internal Firewall - Telemetry Logger, Replayer & Kafka Message Producer",
+    help="Veritas - Telemetry Logger, Replayer & Kafka Message Producer",
     invoke_without_command=True,
 )
 console = Console()
@@ -83,7 +83,7 @@ def main_callback(
     target_choice = attack or day
     if target_choice is not None:
         console.print(Panel.fit(
-            "[bold green]Internal Firewall — Telemetry Replay to Kafka[/bold green]\n"
+            "[bold green]Veritas — Telemetry Replay to Kafka[/bold green]\n"
             f"[cyan]Target: {target_choice.upper()} | Broker: {kafka_server} | Topic: '{topic}'[/cyan]",
             border_style="green",
         ))
@@ -98,7 +98,7 @@ def main_callback(
     # If no subcommand and no --day, show help
     if ctx.invoked_subcommand is None:
         console.print(Panel.fit(
-            "[bold cyan]Internal Firewall — Telemetry Logger & Kafka Producer[/bold cyan]\n\n"
+            "[bold cyan]Veritas — Telemetry Logger & Kafka Producer[/bold cyan]\n\n"
             "[yellow]Quickstart Examples:[/yellow]\n"
             "  • Replay Monday baseline:    [green]uv run logger --day monday[/green]\n"
             "  • Replay Thursday attack:    [green]uv run logger --day thursday --rate 200[/green]\n"
@@ -173,7 +173,7 @@ def sniff(
     """
     from src.sniffer import NetworkSniffer
     console.print(Panel.fit(
-        "[bold green]Internal Firewall - PyShark Live Packet Sniffer[/bold green]\n"
+        "[bold green]Veritas - PyShark Live Packet Sniffer[/bold green]\n"
         f"[cyan]Interface: {interface} | Kafka Broker: {kafka_server} | Topic: '{topic}'[/cyan]",
         border_style="green",
     ))

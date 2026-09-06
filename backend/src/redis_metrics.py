@@ -44,6 +44,7 @@ class RedisMetricsManager:
             "alerts_critical": 0,
         }
         self._memory_active_loggers: set = set()
+        self._memory_logger_last_seen: Dict[str, datetime] = {}
         self._memory_malformed_samples: List[Dict[str, Any]] = []
         self._memory_recent_evaluations: List[Dict[str, Any]] = []
         self._last_log_timestamp: Optional[str] = None
@@ -99,6 +100,7 @@ class RedisMetricsManager:
 
         if logger_id:
             self._memory_active_loggers.add(logger_id)
+            self._memory_logger_last_seen[logger_id] = datetime.now(timezone.utc)
 
         if await self._ensure_connection():
             try:
@@ -211,8 +213,13 @@ class RedisMetricsManager:
         Gathers complete telemetry metrics from Redis (or in-memory cache if disconnected)
         formatted for immediate SOC dashboard visualization.
         """
+        now = datetime.now(timezone.utc)
+        active_window_seconds = 45.0
+        active_loggers = [
+            lid for lid, ls in self._memory_logger_last_seen.items()
+            if (now - ls).total_seconds() <= active_window_seconds
+        ]
         metrics = dict(self._memory_counters)
-        active_loggers = list(self._memory_active_loggers)
         malformed_samples = list(self._memory_malformed_samples)
         recent_evaluations = list(self._memory_recent_evaluations)
         last_log = self._last_log_timestamp
@@ -233,10 +240,25 @@ class RedisMetricsManager:
                     last_log = raw_hash.get("last_log_timestamp", last_log)
                     last_eval = raw_hash.get("last_evaluation_timestamp", last_eval)
 
-                # Active loggers
+                # Active loggers - prune any stopped loggers not seen in last 45s
                 loggers_set = await self.client.smembers(f"{self.prefix}active_loggers")
                 if loggers_set:
-                    active_loggers = list(loggers_set)
+                    last_seen_map = await self.client.hgetall(f"{self.prefix}logger_last_seen") or {}
+                    really_active = []
+                    for lid in loggers_set:
+                        ls_str = last_seen_map.get(lid)
+                        if ls_str:
+                            try:
+                                ls_dt = datetime.fromisoformat(ls_str)
+                                if (now - ls_dt).total_seconds() <= active_window_seconds:
+                                    really_active.append(lid)
+                                else:
+                                    await self.client.srem(f"{self.prefix}active_loggers", lid)
+                            except Exception:
+                                pass
+                        else:
+                            await self.client.srem(f"{self.prefix}active_loggers", lid)
+                    active_loggers = really_active
 
                 # Recent malformed samples
                 samples_raw = await self.client.lrange(f"{self.prefix}recent_malformed_samples", 0, 19)
