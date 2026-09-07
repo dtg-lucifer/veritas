@@ -15,8 +15,8 @@
     if here().page() > 1 [
       #grid(
         columns: (1fr, auto),
-        align(left)[#text(size: 8.5pt, fill: rgb("#64748b"), font: "IBM Plex Serif")[*Veritas* — Autonomous Predictive Network Defense & Infiltration Forecasting]],
-        align(right)[#text(size: 8.5pt, fill: rgb("#64748b"), font: "IBM Plex Serif")[SIH 2026 Technical Report]]
+        align(left)[#text(size: 8.5pt, fill: rgb("#64748b"), font: "Libertinus Serif")[*Veritas* — Autonomous Predictive Network Defense & Infiltration Forecasting]],
+        align(right)[#text(size: 8.5pt, fill: rgb("#64748b"), font: "Libertinus Serif")[SIH 2026 Technical Report]]
       )
       #v(-3pt)
       #line(length: 100%, stroke: 0.4pt + rgb("#cbd5e1"))
@@ -29,17 +29,16 @@
       #v(2pt)
       #grid(
         columns: (1fr, auto),
-        align(left)[#text(size: 8.5pt, fill: rgb("#94a3b8"), font: "IBM Plex Serif")[Confidential & Proprietary — Veritas Project]],
-        align(right)[#text(size: 8.5pt, fill: rgb("#475569"), font: "IBM Plex Serif", weight: "bold")[Page #here().page()]]
+        align(left)[#text(size: 8.5pt, fill: rgb("#94a3b8"), font: "Libertinus Serif")[Confidential & Proprietary — Veritas Project]],
+        align(right)[#text(size: 8.5pt, fill: rgb("#475569"), font: "Libertinus Serif", weight: "bold")[Page #here().page()]]
       )
     ]
   }
 )
 
-// Typography Configuration (IBM Plex Serif Light for crisp, readable body text)
+// Typography Configuration (Default Serif: Libertinus Serif)
 #set text(
-  font: ("IBM Plex Serif", "Libertinus Serif"),
-  weight: "light",
+  font: "Libertinus Serif",
   size: 10.5pt,
   fill: rgb("#0f172a"),
   lang: "en",
@@ -51,7 +50,7 @@
 )
 
 #show heading: it => {
-  set text(fill: primary-color, font: ("IBM Plex Serif", "Libertinus Serif"))
+  set text(fill: primary-color, font: "Libertinus Serif")
   if it.level == 1 {
     v(1.4em)
     text(size: 1.65em, weight: "bold")[#it.body]

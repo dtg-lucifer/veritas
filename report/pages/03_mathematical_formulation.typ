@@ -69,37 +69,41 @@ The resulting 32 values are packed into the standardized observation vector $S_t
 $ S_t = [s_(t, 1), s_(t, 2), dots, s_(t, 32)]^top in bb(R)^(32) $
 
 #figure(
-  table(
-    columns: (0.6fr, 1.8fr, 3.2fr, 2.4fr),
-    stroke: 0.5pt + rgb("#cbd5e1"),
-    fill: (x, y) => if y == 0 { rgb("#f1f5f9") } else if calc.even(y) { rgb("#f8fafc") } else { white },
-    inset: 6pt,
-    table.header(
-      [*Index*],
-      [*Feature Name*],
-      [*Mathematical / Physical Formula*],
-      [*Threat Defense Function*]
-    ),
-    [1], [`flow_count`], [$N_t = sum_(i in "Window") 1$], [Volumetric connection surge],
-    [2–3], [`tot_fwd_pkts`, `tot_bwd_pkts`], [$P_("fwd") = sum p_("fwd", i), quad P_("bwd") = sum p_("bwd", i)$], [Asymmetry / volumetric floods],
-    [4–5], [`tot_fwd_bytes`, `tot_bwd_bytes`], [$B_("fwd") = sum b_("fwd", i), quad B_("bwd") = sum b_("bwd", i)$], [Bulk exfiltration / large payloads],
-    [6–7], [`flow_bytes_rate`, `flow_pkts_rate`], [$1/N sum ("bytes"_i / d_i), quad 1/N sum ("pkts"_i / d_i)$], [Line-rate bandwidth saturation],
-    [8], [`flow_duration_mean`], [$1/N sum d_i$ (seconds)], [Short probe vs lingering session],
-    [9–10], [`syn_flag_count`, `syn_ratio`], [$sum "SYN"_i, quad (sum "SYN"_i) / (max(P_("tot"), 1))$], [SYN floods & half-open port scans],
-    [11–12], [`ack_flag_count`, `ack_ratio`], [$sum "ACK"_i, quad (sum "ACK"_i) / (max(P_("tot"), 1))$], [Established session verification],
-    [13–14], [`rst_flag_count`, `fin_flag_count`], [$sum "RST"_i, quad sum "FIN"_i$], [Closed port rejection storms],
-    [15–16], [`psh_flag_count`, `urg_flag_count`], [$sum "PSH"_i, quad sum "URG"_i$], [Immediate buffer exploit pushes],
-    [17], [`unique_dst_ports`], [$abs( union.big_i { "dst_port"_i } )$], [Reconnaissance sweep detection],
-    [18], [`ephemeral_port_ratio`], [$1/N sum bb(I)("dst_port"_i >= 1024)$], [Lateral RPC & SMB movement],
-    [19–21], [`web_`, `dns_`, `ssh_ftp_port_ratio`], [$1/N sum bb(I)("dst_port"_i in cal(P)_"target")$], [Targeted protocol exploitation],
-    [22–23], [`tcp_ratio`, `udp_protocol_ratio`], [$1/N sum bb(I)("protocol"_i == 6 "or" 17)$], [Stateful TCP vs UDP floods],
-    [24–25], [`pkt_len_mean`, `pkt_len_std`], [Empirical mean and standard deviation of packet length], [Buffer injection / payload anomaly],
-    [26–28], [`flow_iat_mean`, `_std`, `_max`], [Empirical mean, std, and max of inter-arrival timing], [Low-and-slow automated scans],
-    [29], [`down_up_ratio_mean`], [$1/N sum (B_("bwd", i) / max(B_("fwd", i), 1))$], [Exfiltration ratio inversion],
-    [30], [`init_fwd_win_mean`], [$1/N sum "win_bytes"_i$], [Operating system fingerprinting],
-    [31–32], [`active_mean`, `idle_duration_mean`], [$1/N sum t_("active", i), quad 1/N sum t_("idle", i)$], [C2 periodic beaconing intervals]
-  ),
-  caption: [Complete Specification of the 32-Dimensional Veritas Network State Vector ($S_t$).]
+  {
+    set text(size: 8pt)
+    show raw: set text(size: 7.2pt)
+    table(
+      columns: (0.45fr, 2.35fr, 3.6fr, 3.6fr),
+      stroke: 0.5pt + rgb("#cbd5e1"),
+      fill: (x, y) => if y == 0 { rgb("#f1f5f9") } else if calc.even(y) { rgb("#f8fafc") } else { white },
+      inset: (x: 4.5pt, y: 3.5pt),
+      table.header(
+        [*Index*],
+        [*Feature Name*],
+        [*Selection Rationale (Why Picked)*],
+        [*Threat Defense Function (How It Helps)*]
+      ),
+      [1], [`flow_count`], [Captures total connection initiation volume and concurrent flow density within the 15-second macro-window.], [Detects volumetric connection surges, rapid DoS blitzes, and automated scanner spikes.],
+      [2–3], [`tot_fwd_pkts` \ `tot_bwd_pkts`], [Quantifies directional packet asymmetry between client requests and server responses.], [Identifies unidirectional packet floods, response-less SYN scans, and UDP amplification.],
+      [4–5], [`tot_fwd_bytes` \ `tot_bwd_bytes`], [Tracks raw directional byte throughput to monitor macroscopic data volume across endpoints.], [Uncovers bulk data exfiltration campaigns, large database dumps, and bandwidth exhaustion.],
+      [6–7], [`flow_bytes_rate` \ `flow_pkts_rate`], [Normalizes packet and byte throughput by active flow duration to assess instantaneous transmission intensity.], [Catches line-rate bandwidth saturation and sudden anomalous traffic bursts regardless of flow lifespan.],
+      [8], [`flow_duration_mean`], [Evaluates the average temporal lifespan of network sessions across the aggregated window.], [Distinguishes transient port scan probes (sub-second bursts) from persistent C2 interactive shells.],
+      [9–10], [`syn_flag_count` \ `syn_ratio`], [Measures raw connection attempts and normalizes them against total packet volume to evaluate handshake balance.], [Flags half-open SYN flood attacks, stealth reconnaissance (e.g., Nmap SYN scans), and failed initiations.],
+      [11–12], [`ack_flag_count` \ `ack_ratio`], [Quantifies completed handshakes and established two-way conversations relative to aggregate traffic.], [Validates legitimate session continuity and exposes ACK storm anomalies or non-stateful floods.],
+      [13–14], [`rst_flag_count` \ `fin_flag_count`], [Tracks abrupt session terminations, resets, and orderly teardowns within the monitoring window.], [Exposes closed-port rejection storms from rapid port sweeps, broken sessions, and teardown attacks.],
+      [15–16], [`psh_flag_count` \ `urg_flag_count`], [Monitors urgency flags that bypass operating system socket buffers for immediate application delivery.], [Pinpoints weaponized exploit payloads, shellcode execution pushes, and out-of-band data injection.],
+      [17], [`unique_dst_ports`], [Measures the cardinality of distinct target destination ports contacted within the 15-second window.], [Primary indicator for horizontal port scans, endpoint enumeration, and vulnerability sweeps.],
+      [18], [`ephemeral_port_ratio`], [Tracks the fraction of connections targeting dynamic high ports ($>= 1024$) outside standard services.], [Detects lateral movement across endpoints utilizing Windows RPC, SMB, and distributed dynamic microservices.],
+      [19–21], [`web_port_ratio` \ `dns_port_ratio` \ `ssh_ftp_port_ratio`], [Measures traffic concentration directed at high-value operational service ports (80/443/8080, 53, 21/22).], [Isolates targeted web exploits, DNS tunneling/amplification, and credential brute-force attempts.],
+      [22–23], [`tcp_ratio` \ `udp_protocol_ratio`], [Establishes the macro balance between connection-oriented (TCP) and connectionless (UDP) transport protocols.], [Differentiates stateful multi-stage TCP intrusions from high-volume UDP reflection/amplification floods.],
+      [24–25], [`pkt_len_mean` \ `pkt_len_std`], [Profiles packet size distribution and payload size variance across the observation window.], [Distinguishes uniform automated probe packets (zero payload) from payload-heavy attacks and buffer exploits.],
+      [26–28], [`flow_iat_mean` \ `flow_iat_std` \ `flow_iat_max`], [Evaluates the timing regularity, dispersion, and upper bounds of packet inter-arrival intervals.], [Detects low-and-slow automated evasion scripts, machine-generated timing consistency, and covert beacon bursts.],
+      [29], [`down_up_ratio_mean`], [Compares inbound response volume to outbound request volume across all active flows.], [Identifies data exfiltration inversions where internal endpoints transmit abnormal outbound volumes without matched requests.],
+      [30], [`init_fwd_win_mean`], [Extracts the initial advertised TCP receiver window size set by initiating endpoint operating systems.], [Enables OS TCP/IP stack fingerprinting, unmasking automated attacking tools with non-standard window defaults.],
+      [31–32], [`active_mean` \ `idle_duration_mean`], [Measures the duty cycle alternating between active data transmission bursts and silent periods.], [Exposes Command & Control (C2) heartbeat periodicity, sleep jitter intervals, and covert communication synchronization.]
+    )
+  },
+  caption: [Feature Selection Rationale and Threat Defense Function of the 32-Dimensional State Vector ($S_t$).]
 )
 
 == Aggregating 8 Windows (120-Second History) into PyTorch Tensors
