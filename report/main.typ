@@ -36,9 +36,10 @@
   }
 )
 
-// Typography Configuration (IBM Plex Serif)
+// Typography Configuration (IBM Plex Serif Light for crisp, readable body text)
 #set text(
   font: ("IBM Plex Serif", "Libertinus Serif"),
+  weight: "light",
   size: 10.5pt,
   fill: rgb("#0f172a"),
   lang: "en",
@@ -78,7 +79,34 @@
   v(0.8em)
 }
 
-#show raw: set text(font: ("IBM Plex Mono", "JetBrains Mono", "DejaVu Sans Mono"), size: 9pt)
+#show raw: set text(font: ("IBM Plex Mono", "DejaVu Sans Mono"), size: 8.5pt)
+
+#show raw.where(block: false): box.with(
+  fill: rgb("#f1f5f9"),
+  stroke: 0.4pt + rgb("#cbd5e1"),
+  radius: 3pt,
+  inset: (x: 3.5pt, y: 0pt),
+  outset: (y: 2.5pt),
+)
+
+#show raw.where(block: true): it => block(
+  fill: rgb("#f8fafc"),
+  stroke: (left: 3pt + secondary-color, rest: 0.6pt + rgb("#cbd5e1")),
+  radius: (right: 4pt, left: 0pt),
+  inset: (x: 10pt, y: 8pt),
+  width: 100%,
+  if it.lines.len() == 0 [ ] else {
+    grid(
+      columns: (auto, 1fr),
+      column-gutter: 10pt,
+      row-gutter: 3.5pt,
+      ..it.lines.map(line => (
+        align(right, text(fill: rgb("#94a3b8"), font: ("IBM Plex Mono", "DejaVu Sans Mono"), size: 7.5pt, str(line.number))),
+        line
+      )).flatten()
+    )
+  }
+)
 
 // --- COVER PAGE ---
 #align(center + horizon)[
@@ -95,7 +123,7 @@
       #line(length: 40%, stroke: 1.5pt + secondary-color)
       #v(14pt)
 
-      #text(size: 32pt, weight: "bold", fill: primary-color)[VERITAS]
+      #text(size: 32pt, weight: "bold", fill: primary-color)[Veritas]
       
       #v(8pt)
       #text(size: 15pt, weight: "medium", fill: rgb("#334155"))[

@@ -182,6 +182,249 @@ The unified latent representation $h_("attn") in bb(R)^(B times 64)$ is passed i
 3. *MITRE ATT&CK Stage Head:* Classifies the tactical attack stage across 6 classes ($c in {0..5}$):
    $ hat(y)_("stage") = "Softmax"( W_("stage", 2) dot "LeakyReLU"( W_("stage", 1) h_("attn") + b_("stage", 1) ) + b_("stage", 2) ) in Delta^5 $
 
+== PyTorch Implementation: Under the Hood of the Network World Model
+
+The operational core of Veritas is implemented as a unified PyTorch neural module (`ml/src/world_model/network_world_model.py`). It consists of an MLP State Latent Encoder, a 2-layer Recurrent Dynamics Core (LSTM), a Temporal Multi-Head Attention pooling layer, and three task-specific output heads:
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class TemporalMultiHeadAttention(nn.Module):
+    """
+    Computes self-attention over the sliding temporal sequence [t-W+1, ..., t].
+    Pools historical states and produces attention weights for explainability.
+    """
+    def __init__(self, hidden_dim: int = 64, num_heads: int = 4, dropout: float = 0.1):
+        super().__init__()
+        self.num_heads = num_heads
+        self.head_dim = hidden_dim // num_heads
+        self.q_linear = nn.Linear(hidden_dim, hidden_dim)
+        self.k_linear = nn.Linear(hidden_dim, hidden_dim)
+        self.v_linear = nn.Linear(hidden_dim, hidden_dim)
+        self.out_proj = nn.Linear(hidden_dim, hidden_dim)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor):
+        # x shape: (B, T, hidden_dim) -> (Batch, Sequence Length, Channels)
+        B, T, D = x.shape
+        H, d_k = self.num_heads, self.head_dim
+
+        # Project and reshape into multi-head queries, keys, and values
+        # (B, T, D) -> (B, T, H, d_k) -> transpose to (B, H, T, d_k)
+        q = self.q_linear(x).view(B, T, H, d_k).transpose(1, 2)
+        k = self.k_linear(x).view(B, T, H, d_k).transpose(1, 2)
+        v = self.v_linear(x).view(B, T, H, d_k).transpose(1, 2)
+
+        # Scaled dot-product attention scores: (B, H, T, T)
+        scores = torch.matmul(q, k.transpose(-2, -1)) / (d_k ** 0.5)
+        attn_probs = self.dropout(F.softmax(scores, dim=-1))
+
+        # Weighted context accumulation: (B, H, T, d_k) -> (B, T, D)
+        context = torch.matmul(attn_probs, v).transpose(1, 2).contiguous().view(B, T, D)
+        out = self.out_proj(context)
+
+        # Extract attention weights for current step (query = last step T-1)
+        last_step_attn = attn_probs[:, :, -1, :].mean(dim=1)  # Shape: (B, T)
+        pooled = out[:, -1, :]                                # Shape: (B, D)
+        return pooled, last_step_attn
+
+
+class NetworkWorldModel(nn.Module):
+    """
+    Attention-Augmented Recurrent World Model for Network Cyber Defense.
+    Simulates transition dynamics P(S_{t+1} | S_{<=t}) and multi-task threats.
+    """
+    def __init__(self, state_dim: int = 32, hidden_dim: int = 64, num_stages: int = 6):
+        super().__init__()
+        self.state_dim = state_dim
+        self.hidden_dim = hidden_dim
+
+        # 1. State Latent Encoder: maps physical 32-D vector to 64-D manifold
+        self.encoder = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.LeakyReLU(0.1),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.LeakyReLU(0.1),
+        )
+
+        # 2. Recurrent Causal Dynamics Core: 2-layer causal LSTM
+        self.recurrent_core = nn.LSTM(
+            input_size=hidden_dim,
+            hidden_size=hidden_dim,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.15,
+        )
+
+        # 3. Temporal Multi-Head Attention pooling
+        self.attention = TemporalMultiHeadAttention(hidden_dim, num_heads=4)
+
+        # 4. Dynamics Transition Head: simulates next network state S_{t+1}
+        self.dynamics_head = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.LeakyReLU(0.1),
+            nn.Linear(hidden_dim, state_dim),
+        )
+
+        # 5. Infiltration Probability Head (Binary intrusion logit)
+        self.infiltration_head = nn.Sequential(
+            nn.Linear(hidden_dim, 32),
+            nn.LeakyReLU(0.1),
+            nn.Linear(32, 1),
+        )
+
+        # 6. MITRE ATT&CK Tactical Stage Head (6-class classification)
+        self.stage_head = nn.Sequential(
+            nn.Linear(hidden_dim, 32),
+            nn.LeakyReLU(0.1),
+            nn.Linear(32, num_stages),
+        )
+
+    def forward(self, x_seq: torch.Tensor):
+        # x_seq input: (Batch_size, Seq_len=8, State_dim=32)
+        B, T, D = x_seq.shape
+
+        # Flatten (B, T) to pass all sequence tokens through MLP encoder in parallel
+        z_seq = self.encoder(x_seq.view(B * T, D)).view(B, T, self.hidden_dim)
+
+        # Process through causal LSTM core
+        lstm_out, _ = self.recurrent_core(z_seq)  # Shape: (B, 8, 64)
+
+        # Attend across temporal history and pool summary state
+        pooled_h, attn_weights = self.attention(lstm_out)  # (B, 64), (B, 8)
+
+        # Parallel multi-task prediction heads
+        pred_state = self.dynamics_head(pooled_h)     # Shape: (B, 32) -> Next state
+        inf_logits = self.infiltration_head(pooled_h) # Shape: (B, 1)  -> Threat logit
+        stage_logits = self.stage_head(pooled_h)       # Shape: (B, 6)  -> MITRE stage
+
+        return pred_state, inf_logits, stage_logits, attn_weights
+```
+
+== Tensor Dimension Mechanics: Squeezing, Unsqueezing & Reshaping
+
+Understanding how multi-dimensional tensors are squeezed, unsqueezed, and reshaped is critical to understanding how the World Model operates under the hood. The pipeline navigates between continuous physical time and discrete batch dimensions:
+
+1. *Unsqueezing for Streaming Inference (`unsqueeze(0)`):*
+   During live deployment, telemetry arrives as a single sliding window matrix of shape $(8, 32)$. PyTorch layers strictly require an explicit batch dimension $B$. Using `tensor.unsqueeze(0)` inserts a singleton dimension at axis 0, converting the 2D matrix into a 3D batch tensor of shape $(1, 8, 32)$.
+
+2. *Collapsing Sequence Dimensions for Parallel Projection (`view(B * T, D)`):*
+   Linear layers in the latent encoder operate on vectors of size $D=32$. Rather than unrolling a loop over $T=8$ time steps, Veritas collapses the batch and sequence axes into a single dimension of size $B times T$. All 8 historical time steps across the batch are projected concurrently through LayerNorm and LeakyReLU before `.view(B, T, H)` restores the 3D temporal sequence $(B, 8, 64)$ for the recurrent LSTM.
+
+3. *Squeezing Threat Logits for Loss Functions (`inf_logits.squeeze(-1)`):*
+   The infiltration head produces a tensor of shape $(B, 1)$. When computing binary cross-entropy against a 1D target vector `b_y_inf` of shape $(B,)$, PyTorch's `F.binary_cross_entropy_with_logits` requires matching dimensional ranks. Calling `.squeeze(-1)` removes the trailing singleton dimension, transforming $(B, 1)$ into $(B,)$. Without this squeeze, broadcasting rules would compute an unintended outer product matrix of shape $(B, B)$, corrupting gradient backpropagation.
+
+4. *Squeezing Predictions for Single-Sample Deployment (`squeeze(0)`):*
+   When the forward simulator completes a rollout step, `pred_state` has shape $(1, 32)$. Calling `.squeeze(0).cpu().numpy()` extracts the raw 1D numpy vector of shape $(32,)$, allowing it to be inverted through `RobustScaler` and stacked into the sliding history buffer.
+
+The following self-contained script illustrates these exact dimensional transformations:
+
+```python
+import torch
+
+# 1. Simulate single streaming history buffer: W=8 windows of 32 features
+raw_window = torch.randn(8, 32)
+print("1. Raw sliding window shape:", raw_window.shape)  # torch.Size([8, 32])
+
+# 2. Unsqueeze batch dimension for neural inference
+x_seq = raw_window.unsqueeze(0)
+print("2. Unsqueezed batch tensor:", x_seq.shape)       # torch.Size([1, 8, 32])
+
+# 3. Collapse batch and time for parallel MLP state encoder
+B, T, D = x_seq.shape
+flat_seq = x_seq.view(B * T, D)
+print("3. Flattened for encoder:", flat_seq.shape)      # torch.Size([8, 32])
+
+# 4. Latent projection (32 -> 64) and reshape back to sequence
+encoder_linear = torch.nn.Linear(32, 64)
+z_seq = encoder_linear(flat_seq).view(B, T, 64)
+print("4. Latent sequence tensor:", z_seq.shape)       # torch.Size([1, 8, 64])
+
+# 5. Output head gives threat logit of shape (B, 1)
+raw_logit = torch.tensor([[2.45]])
+print("5. Raw head logit shape:", raw_logit.shape)       # torch.Size([1, 1])
+
+# 6. Squeeze trailing dimension for BCE loss computation or scalar scoring
+squeezed_logit = raw_logit.squeeze(-1)
+print("6. Squeezed scalar logit:", squeezed_logit.shape) # torch.Size([1])
+prob = torch.sigmoid(squeezed_logit).item()
+print(f"7. Computed breach probability: {prob:.4f}")    # e.g., 0.9206
+```
+
+== Training the World Model: Multi-Task Loss & Optimization Loop
+
+Training a World Model differs profoundly from training a standard classifier. The model must simultaneously solve two distinct tasks:
+1. *Self-Supervised Environment Physics:* Accurately predict the next physical state snapshot $S_(t+1)$ given prior history $S_(<= t)$ via Mean Squared Error ($"MSE"$).
+2. *Threat Detection & Attribution:* Accurately predict whether an infiltration is taking place via Binary Cross-Entropy ($"BCE"$) and classify the specific MITRE ATT&CK tactical stage via Multi-Class Cross-Entropy ($"CE"$).
+
+The composite loss function is balanced using task loss weights:
+
+$ cal(L)_("composite") = w_("dyn") cal(L)_("dyn") + w_("inf") cal(L)_("inf") + w_("stage") cal(L)_("stage") $
+
+where $w_("dyn") = 1.0$, $w_("inf") = 1.5$, and $w_("stage") = 1.0$. The elevated weight on $w_("inf")$ prioritizes sensitivity to stealthy infiltration campaigns.
+
+The complete training step implementation (`ml/train.py`) is presented below:
+
+```python
+import torch
+import torch.nn.functional as F
+
+def train_world_model_epoch(model, dataloader, optimizer, scheduler, device):
+    """
+    Executes one full training epoch over sliding temporal trajectories.
+    Optimizes dynamics reconstruction, infiltration detection, and MITRE mapping.
+    """
+    model.train()
+    w_dyn, w_inf, w_stage = 1.0, 1.5, 1.0
+    total_epoch_loss = 0.0
+
+    for b_x_seq, b_y_state, b_y_inf, b_y_stage in dataloader:
+        # b_x_seq:   (Batch, 8, 32) -> 120-second history trajectory
+        # b_y_state: (Batch, 32)    -> Ground truth next state S_{t+1}
+        # b_y_inf:   (Batch)        -> Binary ground truth (0: Benign, 1: Threat)
+        # b_y_stage: (Batch)        -> MITRE stage integer (0..5)
+        b_x_seq = b_x_seq.to(device)
+        b_y_state = b_y_state.to(device)
+        b_y_inf = b_y_inf.to(device)
+        b_y_stage = b_y_stage.to(device)
+
+        optimizer.zero_grad()
+
+        # Forward pass: multi-task predictions
+        pred_state, inf_logits, stage_logits, _ = model(b_x_seq)
+
+        # Task 1: Next-state transition dynamics loss (MSE)
+        loss_dyn = F.mse_loss(pred_state, b_y_state)
+
+        # Task 2: Infiltration threat probability loss (BCE with logits)
+        # Squeeze inf_logits from (B, 1) to (B,) to align with target rank
+        loss_inf = F.binary_cross_entropy_with_logits(inf_logits.squeeze(-1), b_y_inf)
+
+        # Task 3: MITRE ATT&CK tactical attack stage loss (Multi-class CE)
+        loss_stage = F.cross_entropy(stage_logits, b_y_stage)
+
+        # Composite multi-task objective
+        composite_loss = (w_dyn * loss_dyn) + (w_inf * loss_inf) + (w_stage * loss_stage)
+
+        # Backward propagation
+        composite_loss.backward()
+
+        # Gradient norm clipping: prevents exploding gradients across LSTM unrolls
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+        # Optimizer update
+        optimizer.step()
+        total_epoch_loss += composite_loss.item()
+
+    scheduler.step()
+    return total_epoch_loss / len(dataloader)
+```
+
 #callout(title: "In Simple Words: How Raw Network Packets Become an AI Threat Forecast", label: "STEP-BY-STEP SUMMARY")[
   1. *From Packets to Table:* Every single packet flowing through the router is collected. Every 15 seconds, Veritas counts how many packets arrived, how many were SYN scans, how many bytes were sent, and how many different ports were touched.
   2. *From Table to Vector:* These 32 summary numbers are packed into a single list called the *Network State Vector* ($S_t$).

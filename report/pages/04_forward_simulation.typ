@@ -72,6 +72,61 @@ At each rollout step $k$:
 2. The oldest state $S_(t-W+k)$ is dropped from the context buffer.
 3. The simulated state $hat(S)_(t+k)$ is appended to form the context for the subsequent step $X_k$.
 
+=== Autoregressive Rollout Engine: PyTorch Implementation & Tensor Squeezing
+
+The forward rollout loop operates by tightly interleaving tensor transformations with physical state denormalization (`ml/src/world_model/forward_simulator.py`):
+
+```python
+import numpy as np
+import torch
+
+def autoregressive_rollout(world_model, scaler, history_states, k_steps=5, device="cpu"):
+    """
+    Simulates K future steps ahead by feeding model predictions back into context.
+    
+    Args:
+        history_states: (W=8, D=32) numpy array of observed physical state vectors
+        k_steps: number of 15s time steps to project into future (5 = +75s)
+    """
+    world_model.eval()
+    # 1. Normalize observed history using fitted RobustScaler
+    curr_seq = scaler.transform(history_states)  # Shape: (8, 32)
+    
+    rollout_predictions = []
+    
+    for step in range(1, k_steps + 1):
+        # 2. Unsqueeze batch dimension for neural model: (8, 32) -> (1, 8, 32)
+        seq_tensor = torch.tensor(curr_seq, dtype=torch.float32, device=device).unsqueeze(0)
+        
+        with torch.no_grad():
+            pred_next_norm, inf_logits, stage_logits, attn_weights = world_model(seq_tensor)
+        
+        # 3. Extract scalar intrusion probability
+        inf_prob = float(torch.sigmoid(inf_logits).item())
+        pred_stage_id = int(torch.argmax(stage_logits, dim=-1).item())
+        
+        # 4. Squeeze batch dimension to retrieve single state vector: (1, 32) -> (32,)
+        pred_next_np = pred_next_norm.squeeze(0).cpu().numpy()
+        
+        # 5. Denormalize back to physical network units (packets, bytes, rates)
+        pred_state_physical = scaler.inverse_transform(pred_next_np.reshape(1, -1)).squeeze(0)
+        pred_state_physical = np.maximum(pred_state_physical, 0.0)  # Clip negative counts
+        
+        rollout_predictions.append({
+            "step": step,
+            "seconds_ahead": step * 15,
+            "infiltration_prob": inf_prob,
+            "predicted_mitre_stage": pred_stage_id,
+            "predicted_state": pred_state_physical,
+        })
+        
+        # 6. Autoregressive Update: Drop oldest state [0] and append simulated state
+        # Shape remains strictly (8, 32) for the next iteration step
+        curr_seq = np.vstack([curr_seq[1:], pred_next_np])
+        
+    return rollout_predictions
+```
+
 == Infiltration Trajectory Analysis & Early Warning Horizon
 
 The output of the forward simulation is a continuous *Threat Probability Vector*:
