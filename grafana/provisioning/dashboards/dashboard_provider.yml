@@ -9,4 +9,8 @@ providers:
     editable: true
     updateIntervalSeconds: 10
     options:
-      path: /var/lib/grafana/dashboards
+      # The dashboard JSON is Grafana's v2 API resource format. Grafana's
+      # classic file provider only accepts the legacy panels/schemaVersion
+      # format, so the v2 resource is submitted through the API by the
+      # grafana-dashboard-provisioner service in docker-compose.yml.
+      path: /var/lib/grafana/dashboards/legacy

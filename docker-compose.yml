@@ -107,3 +107,19 @@ services:
       - loki
     restart: unless-stopped
 
+  # Grafana 13+ does not accept v2 dashboard resources through classic file
+  # provisioning. Submit the checked-in v2 resource through the v2 API once
+  # Grafana is ready instead.
+  grafana-dashboard-provisioner:
+    image: curlimages/curl:8.10.1
+    container_name: firewall_grafana_dashboard_provisioner
+    depends_on:
+      - grafana
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      DASHBOARD_FILE: /dashboard/firewall_world_model_dashboard.json
+    volumes:
+      - ./grafana/dashboards/firewall_world_model_dashboard.json:/dashboard/firewall_world_model_dashboard.json:ro
+      - ./grafana/provisioning/provision-dashboard.sh:/provision-dashboard.sh:ro
+    entrypoint: ["/bin/sh", "/provision-dashboard.sh"]
+    restart: "no"

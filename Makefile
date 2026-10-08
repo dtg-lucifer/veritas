@@ -69,7 +69,7 @@ help:
 # Infrastructure Management
 # ------------------------------------------------------------------------------
 infra-up:
-	sudo docker compose up -d kafka kafka-ui redis prometheus loki grafana
+	sudo docker compose up -d kafka kafka-ui redis prometheus loki grafana grafana-dashboard-provisioner
 	@echo "Core infrastructure ready:"
 	@echo " - Kafka Broker:     localhost:9092"
 	@echo " - Kafka Web UI:    http://localhost:8081"
